@@ -13,15 +13,16 @@ constrained decoding → clinical ICD-10 coding" exploration into one tested pac
 | `yappu_fsm.lexicon` | Annotated word lexicon with dead-end-free lookahead |
 | `yappu_fsm.decoding` | Byte-trie state machines + `VenbaLogitsProcessor` and `ICD10LogitsProcessor` for `model.generate()` |
 | `yappu_fsm.clinical` | Abbreviations, clause walls, NegEx-style assertion, closest-token laterality, phonetic/fuzzy matching, ICD-10 lookup, MCC evaluation |
+| `yappu_fsm.rules` | ICD-10-CM coding rules in ACE-style controlled English, compiled to stratified Datalog, with proof traces |
 | `yappu_fsm.server` | OpenAI-compatible `/v1/chat/completions` endpoint (stdlib only) |
-| `yappu_fsm.cli` | `yappu asai | validate | code | eval | serve | demo-decode` |
+| `yappu_fsm.cli` | `yappu asai | validate | code [--rules] | rules | eval | serve | demo-decode` |
 
 ## Install
 
 ```bash
 pip install -e ".[dev]"          # core: pure Python, no dependencies
 pip install -e ".[hf,dev]"       # + torch / transformers for constrained decoding
-pytest -q                        # 95 tests; HF tests auto-skip without torch
+pytest -q                        # 117 tests; HF tests auto-skip without torch
 ```
 
 Colab: `notebooks/yappu_fsm_colab_single_cell.ipynb` is one self-contained cell. It embeds the
@@ -161,6 +162,61 @@ history and family-history codes, and more). It is a demo subset. Extend it in t
 format (`{"entity": {"ASSERTION_LATERALITY": code | [codes]}}`) and verify codes against the
 current CMS release. All output is decision support for a certified coder.
 
+## Coding rules in controlled English → Datalog
+
+Conventions that relate facts to each other (combination codes, "code first / use additional",
+Excludes1, symptoms integral to a diagnosis, setting-dependent guidelines) are written as
+ACE-style sentences in `data/icd10cm_rules.ace`:
+
+```text
+DM_CKD:  If the patient has a type-2-diabetes and the patient has a chronic-kidney-disease
+         then the code E11.22 is assigned and the code E11.22 precedes the code N18.9.
+HTN_CKD: If the patient has a hypertension and the patient has a chronic-kidney-disease
+         then the code I12.9 is assigned and the code I10 is not assigned and the code I12.9 precedes the code N18.9.
+EXCL_E10_E11: If the code E10.9 is assigned and the code E11.9 is assigned then the codes E10.9 and E11.9 conflict.
+INPT_UNCERTAIN: If the encounter is an inpatient-encounter and the patient has an uncertain diagnosis X
+         then the candidate code of X is assigned.
+```
+
+```bash
+yappu rules             # parse, show the deterministic paraphrase of every rule
+yappu rules --datalog   # the compiled program, ready to load into another Datalog engine
+yappu code "Pt with T2DM and CKD. Also HTN." --rules     # E11.22, I12.9, N18.9 with proofs
+```
+
+How it works:
+
+1. The linker turns the note into facts: `has(patient, type-2-diabetes)`, `uncertain(patient, pneumonia)`,
+   `side(...)`, `candidate(patient, concept, code)`, `code(patient, code)` and `setting(patient, inpatient)`.
+2. Rules are parsed **once** by `yappu_fsm.rules.ace`. Content words must be lexicon concepts,
+   anything outside the grammar is rejected with the exact word position, and each rule gets a
+   bracketed paraphrase for review. Each rule compiles to Horn clauses.
+3. `yappu_fsm.rules.datalog` evaluates the program: semi-naive, with stratified negation
+   (`final(P, C) :- code(P, C), not blocked(P, C).`). Unsafe or unstratifiable rule sets are
+   rejected at load time, so evaluation always terminates.
+4. The result holds the final codes (sequenced by `precedes`), blocked codes, Excludes1
+   conflicts for coder review, and a proof tree per code that cites the rule sentence.
+
+The language is a coding-rule **subset in the spirit of ACE** and is parsed by this package; it
+does not call the Attempto Parsing Engine. It has no wildcards over code families (E11.9 needs
+one blocking rule per complication code), and sequencing is a simple precedence order.
+
+### Performance
+
+Measured on CPU, Python 3.13 (`tests/test_clinical.py::test_index_scales` guards this):
+
+| | ms / note | notes / s |
+|---|---|---|
+| linker, 32-entry demo lexicon | 0.14 | ~7,400 |
+| linker + 13 coding rules (Datalog) | 0.30 | ~3,300 |
+| linker, 100,000-entry synthetic lexicon | 0.42 | ~2,400 |
+
+The linker finds candidate entries through hash indexes on each entry's first word: exact
+form, phonetic skeleton, and one-deletion keys, which cover one substitution, insertion,
+deletion or swap. A full scan is still available (`ClinicalLinker(index=False)`), and a test
+checks that both give identical results on the gold notes and 300 random typos. A first word
+more than two edits away from the lexicon term is not retrieved by the index.
+
 ## OpenAI-compatible endpoint
 
 ```bash
@@ -175,7 +231,7 @@ r = c.chat.completions.create(model="yappu-icd-linker",
 print(r.choices[0].message.content)    # JSON: findings + allowed_codes
 ```
 
-Models: `yappu-icd-linker` and `yappu-venba-validator`. Pass `"setting": "inpatient"` in the
+Models: `yappu-icd-linker`, `yappu-icd-rules` (codes + proofs) and `yappu-venba-validator`. Pass `"setting": "inpatient"` in the
 request body (`extra_body` in the OpenAI SDK) for the inpatient rule. Streaming is not supported.
 
 ## Corrections relative to the original thread
@@ -205,7 +261,8 @@ request body (`extra_body` in the OpenAI SDK) for the inpatient rule. Streaming 
   dictionary.
 * Venba quality depends on the lexicon. The bundled one (~55 words) is for tests.
 * The clinical linker is rule-based and lexicon-driven. Pair it with a trained NER and
-  assertion model for real charts.
+  assertion model for real charts. Trigger scope is clause-based: in "Probable CAP with cough
+  and fever" the symptoms are also read as uncertain (see `test_known_limitation_*`).
 * No model is trained here, so Sharpness-Aware Minimization does not apply. A Lean 4
   formalisation of the decoder guarantee is not included yet; the guarantee is currently
   checked by property tests.

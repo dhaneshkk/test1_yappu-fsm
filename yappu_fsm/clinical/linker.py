@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple, Union
@@ -117,7 +118,7 @@ class ClinicalLinker:
     def __init__(self, lexicon: Lexicon, max_laterality_distance: int = 4,
                  fuzzy_threshold: float = 0.84, min_fuzzy_word_len: int = 5,
                  post_window_chars: int = 30, max_scope_tokens: int = 6,
-                 setting: str = "outpatient"):
+                 setting: str = "outpatient", index: bool = True):
         if setting not in SETTINGS:
             raise ValueError(f"setting must be one of {SETTINGS}")
         self.setting = setting
@@ -129,6 +130,39 @@ class ClinicalLinker:
         self.max_scope = max_scope_tokens
         self.index = [{"canonical": k, "words": k.split(), "code_map": v} for k, v in self.lexicon.items()]
         self.max_ngram = max((len(e["words"]) for e in self.index), default=1)
+        self.use_index = index
+        self._first_word_index = defaultdict(set)
+        self._cand_cache: Dict[str, Tuple[int, ...]] = {}
+        if index:
+            for i, e in enumerate(self.index):
+                for key in self._index_keys(e["words"][0]):
+                    self._first_word_index[key].add(i)
+
+    # ------------------------------------------------------------------ index
+    def _index_keys(self, w: str):
+        """Hash keys for candidate lookup: exact word, phonetic skeleton and
+        SymSpell-style one-deletion variants (symmetric, so they cover a single
+        substitution, insertion, deletion or adjacent transposition)."""
+        yield "x:" + w
+        if len(w) >= self.min_fuzzy_len:
+            yield "p:" + phonetic_word(w)
+            yield "d:" + w
+            for i in range(len(w)):
+                yield "d:" + w[:i] + w[i + 1:]
+
+    def _candidates(self, first_word: str) -> Sequence[int]:
+        """Indices of lexicon entries whose first word could match ``first_word``."""
+        if not self.use_index:
+            return range(len(self.index))
+        hit = self._cand_cache.get(first_word)
+        if hit is None:
+            found = set()
+            for key in self._index_keys(first_word):
+                found |= self._first_word_index.get(key, set())
+            hit = tuple(sorted(found))
+            if len(self._cand_cache) < 100_000:
+                self._cand_cache[first_word] = hit
+        return hit
 
     # ------------------------------------------------------------------ text
     def expand_abbreviations(self, text: str) -> str:
@@ -171,7 +205,8 @@ class ClinicalLinker:
                     continue
                 span = words[i:i + n]
                 best = None
-                for e in self.index:
+                for ci in self._candidates(words[i]):
+                    e = self.index[ci]
                     if len(e["words"]) != n:
                         continue
                     kinds = [self._word_match(a, b) for a, b in zip(span, e["words"])]

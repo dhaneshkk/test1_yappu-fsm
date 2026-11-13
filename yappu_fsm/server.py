@@ -8,6 +8,8 @@ Models:
                                   the assistant content is a JSON list of findings.
                                   Optional body field ``"setting": "inpatient"`` applies the
                                   ICD-10-CM inpatient rule for uncertain diagnoses.
+  * ``yappu-icd-rules``        – linker facts + controlled-English coding rules (Datalog):
+                                  final sequenced codes, blocked codes, conflicts, proofs.
   * ``yappu-venba-validator``  – validates the last user message as a Nerisai Venba;
                                   the assistant content is the text report.
 
@@ -31,7 +33,7 @@ from . import data_path
 from .clinical import ClinicalLinker, load_lexicon
 from .prosody import validate_nerisai_venba
 
-MODELS = ("yappu-icd-linker", "yappu-venba-validator")
+MODELS = ("yappu-icd-linker", "yappu-icd-rules", "yappu-venba-validator")
 
 
 def _last_user_text(messages) -> str:
@@ -42,6 +44,17 @@ def _last_user_text(messages) -> str:
                 c = " ".join(p.get("text", "") for p in c if isinstance(p, dict))
             return c
     return ""
+
+
+_CODERS: dict = {}
+
+
+def _rule_coder(linker: ClinicalLinker):
+    from .rules import RuleCoder
+    key = id(linker)
+    if key not in _CODERS:
+        _CODERS[key] = RuleCoder(linker, data_path("icd10cm_rules.ace"))
+    return _CODERS[key]
 
 
 def complete(body: dict, linker: ClinicalLinker) -> dict:
@@ -56,6 +69,11 @@ def complete(body: dict, linker: ClinicalLinker) -> dict:
         found = linker.process(text)
         content = json.dumps({"findings": [f.to_dict() for f in found],
                               "allowed_codes": ClinicalLinker.allowed_codes(found)}, ensure_ascii=False)
+    elif model == "yappu-icd-rules":
+        res = _rule_coder(linker).code(text, body.get("setting", "outpatient"))
+        content = json.dumps({"codes": res.codes, "blocked": list(res.blocked),
+                              "conflicts": [[a, b] for a, b, _ in res.conflicts], "proofs": res.proofs},
+                             ensure_ascii=False)
     else:
         content = "\n".join(validate_nerisai_venba(text).lines())
     return {

@@ -164,3 +164,52 @@ def test_invalid_setting(lexicon):
 def test_expanded_cm_lexicon(linker, note, entity, codes):
     f = by_entity(linker.process(note))[entity]
     assert f.codes == codes
+
+
+# ---- index ------------------------------------------------------------------------
+
+def test_index_matches_full_scan(lexicon):
+    import json
+    import random
+
+    from yappu_fsm import data_path
+    from yappu_fsm.clinical import ClinicalLinker
+    fast, slow = ClinicalLinker(lexicon, index=True), ClinicalLinker(lexicon, index=False)
+    notes = [json.loads(l)["note"] for l in open(data_path("gold_assertions.jsonl"), encoding="utf-8")]
+    rng = random.Random(7)
+    for _ in range(300):  # random single-edit typos of lexicon terms inside a sentence
+        term = list(rng.choice(list(lexicon)))
+        i = rng.randrange(len(term))
+        op = rng.choice("sdit")
+        if op == "s":
+            term[i] = rng.choice("abcdefghijklmnopqrstuvwxyz")
+        elif op == "d" and len(term) > 1:
+            del term[i]
+        elif op == "i":
+            term.insert(i, rng.choice("aeiou"))
+        elif op == "t" and i + 1 < len(term):
+            term[i], term[i + 1] = term[i + 1], term[i]
+        notes.append("Patient has " + "".join(term) + " today.")
+    for n in notes:
+        assert [f.to_dict() for f in fast.process(n)] == [f.to_dict() for f in slow.process(n)], n
+
+
+def test_index_scales(lexicon):
+    import random
+    import string
+    import time
+
+    from yappu_fsm.clinical import ClinicalLinker
+    rng = random.Random(0)
+    big = dict(lexicon)
+    while len(big) < 50_000:
+        big[" ".join("".join(rng.choices(string.ascii_lowercase, k=rng.randint(5, 11)))
+                     for _ in range(rng.randint(1, 4)))] = {"PRESENT_UNSPECIFIED": "Z99.9"}
+    lk = ClinicalLinker(big)
+    note = "Pt has lt knee osteoarthritus and mild NPDR OD. Denies SOB, but has uncontrolled HTN. R/O CAP."
+    lk.process(note)
+    t = time.perf_counter()
+    for _ in range(20):
+        found = lk.process(note)
+    assert (time.perf_counter() - t) / 20 < 0.05
+    assert [f.codes for f in found if f.status == "CODE"] == [["M17.12"], ["E11.3291"], ["I10"]]

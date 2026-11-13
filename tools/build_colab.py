@@ -7,7 +7,7 @@ import nbformat
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 INCLUDE = ["pyproject.toml", "README.md", "LICENSE"] + \
-    sorted(str(p.relative_to(ROOT)) for p in (ROOT / "yappu_fsm").rglob("*") if p.suffix in (".py", ".json", ".jsonl")) + \
+    sorted(str(p.relative_to(ROOT)) for p in (ROOT / "yappu_fsm").rglob("*") if p.suffix in (".py", ".json", ".jsonl", ".ace")) + \
     sorted(str(p.relative_to(ROOT)) for p in (ROOT / "tests").glob("*.py"))
 
 files = {rel: (ROOT / rel).read_text(encoding="utf-8") for rel in INCLUDE}
@@ -75,6 +75,15 @@ for f in linker.process(NOTE):
           f"{','.join(f.codes) or '-':<10} {f.status}")
 ev = evaluate(ClinicalLinker(LEX), data_path("gold_assertions.jsonl"))
 print({k: v for k, v in ev.items() if k != "errors"})
+
+# 3b ── controlled-English coding rules -> Datalog ─────────────────────────────
+banner("3b · ICD-10-CM rules in controlled English, compiled to Datalog")
+from yappu_fsm.rules import RuleCoder
+coder = RuleCoder(ClinicalLinker(LEX), data_path("icd10cm_rules.ace"))
+for r in coder.rules[:2]:
+    print(f"{r.rid}: {r.paraphrase()}")
+res = coder.code("Pt with T2DM and CKD. Also HTN. Probable CAP. Cough for three days.", CODING_SETTING)
+print(res.report())
 
 # 4 ── constrained decoding through model.generate() ──────────────────────────
 banner("4 · Constrained decoding (random tiny GPT-2: validity comes from the processor)")

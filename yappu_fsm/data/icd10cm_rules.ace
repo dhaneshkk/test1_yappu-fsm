@@ -1,0 +1,29 @@
+# ICD-10-CM coding rules in the yappu coding-rule language (ACE-style controlled English).
+# One rule per line, optional "ID:" prefix. Concepts are lexicon entries written with hyphens.
+# Demo rule set: verify against the current ICD-10-CM Tabular List and Official Guidelines.
+
+# --- "With" convention (Guideline I.A.15): diabetes + CKD -> combination code, plus CKD stage
+DM_CKD: If the patient has a type-2-diabetes and the patient has a chronic-kidney-disease then the code E11.22 is assigned and the code E11.22 precedes the code N18.9.
+
+# --- Hypertension + CKD are presumed linked (Guideline I.C.9.a.2): I12.9 replaces I10
+HTN_CKD: If the patient has a hypertension and the patient has a chronic-kidney-disease then the code I12.9 is assigned and the code I10 is not assigned and the code I12.9 precedes the code N18.9.
+
+# --- E11.9 means "without complications": it cannot stand next to a complication code
+E11_9_A: If the code E11.22 is assigned then the code E11.9 is not assigned.
+E11_9_B: If the code E11.21 is assigned then the code E11.9 is not assigned.
+E11_9_C: If the code E11.319 is assigned then the code E11.9 is not assigned.
+E11_9_D: If the code E11.3291 is assigned then the code E11.9 is not assigned.
+E11_9_E: If the code E11.3292 is assigned then the code E11.9 is not assigned.
+E11_9_F: If the code E11.3293 is assigned then the code E11.9 is not assigned.
+E11_9_G: If the code E11.3299 is assigned then the code E11.9 is not assigned.
+
+# --- Excludes1 at E11 (type 1 diabetes, E10.-): report for coder review instead of guessing
+EXCL_E10_E11: If the code E10.9 is assigned and the code E11.9 is assigned then the codes E10.9 and E11.9 conflict.
+
+# --- Signs and symptoms integral to a confirmed diagnosis are not coded (Guideline I.B.5)
+SYMPT_PNA_COUGH: If the code J18.9 is assigned then the code R05.9 is not assigned.
+SYMPT_PNA_FEVER: If the code J18.9 is assigned then the code R50.9 is not assigned.
+
+# --- Inpatient uncertain diagnoses are coded as if established (Guideline II.H / III.C).
+#     Outpatient (Guideline IV.H) needs no rule: uncertain diagnoses simply get no code.
+INPT_UNCERTAIN: If the encounter is an inpatient-encounter and the patient has an uncertain diagnosis X then the candidate code of X is assigned.

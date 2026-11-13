@@ -22,7 +22,7 @@ yappu = "yappu_fsm.cli:main"
 include = ["yappu_fsm*"]
 
 [tool.setuptools.package-data]
-yappu_fsm = ["data/*.json", "data/*.jsonl"]
+yappu_fsm = ["data/*.json", "data/*.jsonl", "data/*.ace"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -31,8 +31,22 @@ def _linker(path, setting="outpatient"):
     return ClinicalLinker(load_lexicon(path or data_path("icd10cm_example_lexicon.json")), setting=setting)
 
 
+def _coder(lexicon, rules):
+    from .rules import RuleCoder
+    return RuleCoder(_linker(lexicon), data_path("icd10cm_rules.ace") if rules in (None, "default") else rules)
+
+
 def cmd_code(a):
     text = sys.stdin.read() if a.note in (None, "-") else a.note
+    if a.rules is not None:
+        res = _coder(a.lexicon, a.rules).code(text, a.setting)
+        if a.json:
+            print(json.dumps({"codes": res.codes, "blocked": list(res.blocked),
+                              "conflicts": [[x, y] for x, y, _ in res.conflicts], "proofs": res.proofs},
+                             ensure_ascii=False, indent=2))
+        else:
+            print(res.report())
+        return
     L = _linker(a.lexicon, a.setting)
     findings = L.process(text)
     if a.json:
@@ -42,6 +56,21 @@ def cmd_code(a):
             print(f"{f.raw_mention:<28} -> {f.entity:<42} {f.match_type:<15} {f.assertion:<15} "
                   f"{f.laterality:<11} {','.join(f.codes) or '-':<18} {f.status}")
         print("allowed codes:", ", ".join(L.allowed_codes(findings)) or "(none)")
+
+
+def cmd_rules(a):
+    from .rules import compile_rules, parse_rules
+    from .clinical import load_lexicon
+    path = a.file or data_path("icd10cm_rules.ace")
+    lex = load_lexicon(a.lexicon or data_path("icd10cm_example_lexicon.json"))
+    rules = parse_rules(open(path, encoding="utf-8").read(), concepts=lex.keys())
+    prog = compile_rules(rules)
+    if a.datalog:
+        print(prog.to_text())
+        return
+    for r in rules:
+        print(f"{r.rid}: {r.paraphrase()}")
+    print(f"\n{len(rules)} rules OK, {len(prog.rules)} Datalog clauses, {len(prog.strata())} strata")
 
 
 def cmd_eval(a):
@@ -85,7 +114,14 @@ def main(argv=None):
     s.add_argument("--json", action="store_true")
     s.add_argument("--setting", choices=["outpatient", "inpatient"], default="outpatient",
                    help="ICD-10-CM guideline for uncertain diagnoses (default: outpatient)")
+    s.add_argument("--rules", nargs="?", const="default",
+                   help="apply controlled-English coding rules (default rule set, or a .ace file)")
     s.set_defaults(fn=cmd_code)
+    s = sub.add_parser("rules", help="check a controlled-English rules file: paraphrases or Datalog")
+    s.add_argument("file", nargs="?")
+    s.add_argument("--lexicon")
+    s.add_argument("--datalog", action="store_true", help="print the compiled Datalog program")
+    s.set_defaults(fn=cmd_rules)
     s = sub.add_parser("eval", help="MCC evaluation on a gold JSONL file")
     s.add_argument("--gold")
     s.add_argument("--lexicon")

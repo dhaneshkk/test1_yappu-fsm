@@ -26,8 +26,12 @@ def test_openai_compatible_endpoint():
         r = post({"model": "yappu-venba-validator", "messages": [{"role": "user", "content": POEM_2}]})
         assert "VALID Nerisai Venba" in r["choices"][0]["message"]["content"]
 
+        r = post({"model": "yappu-icd-rules", "setting": "outpatient",
+                  "messages": [{"role": "user", "content": "Pt with T2DM and CKD. Also HTN."}]})
+        assert json.loads(r["choices"][0]["message"]["content"])["codes"] == ["E11.22", "I12.9", "N18.9"]
+
         models = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{port}/v1/models").read())
-        assert {m["id"] for m in models["data"]} == {"yappu-icd-linker", "yappu-venba-validator"}
+        assert {m["id"] for m in models["data"]} == {"yappu-icd-linker", "yappu-icd-rules", "yappu-venba-validator"}
     finally:
         srv.shutdown()
 
@@ -39,5 +43,11 @@ def test_cli(capsys):
     assert main(["validate", "எண்ணும் வானில்"]) == 1
     main(["code", "Pt has lt knee osteoarthritis"])
     assert "M17.12" in capsys.readouterr().out
+    main(["code", "Pt with T2DM and CKD.", "--rules"])
+    assert "E11.22" in capsys.readouterr().out
+    main(["rules"])
+    assert "rules OK" in capsys.readouterr().out
+    main(["rules", "--datalog"])
+    assert "final(P, C)" in capsys.readouterr().out
     main(["eval"])
     assert "assertion_mcc" in capsys.readouterr().out
