@@ -22,7 +22,7 @@ constrained decoding → clinical ICD-10 coding" exploration into one tested pac
 ```bash
 pip install -e ".[dev]"          # core: pure Python, no dependencies
 pip install -e ".[hf,dev]"       # + torch / transformers for constrained decoding
-pytest -q                        # 117 tests; HF tests auto-skip without torch
+pytest -q                        # 121 tests; HF tests auto-skip without torch
 ```
 
 Colab: `notebooks/yappu_fsm_colab_single_cell.ipynb` is one self-contained cell. It embeds the
@@ -197,9 +197,24 @@ How it works:
 4. The result holds the final codes (sequenced by `precedes`), blocked codes, Excludes1
    conflicts for coder review, and a proof tree per code that cites the rule sentence.
 
+**Sequencing.** Each final code starts at a default position. A code the linker produced keeps
+its finding's place. A rule-derived code takes the place of the code it replaced (E11.22 where
+E11.9 was, I12.9 where I10 was); otherwise it sits at the earliest finding its proof mentions.
+`precedes` facts are then applied as a stable topological order. House sequencing policy is
+itself written as rules, using code variables and code kinds (diagnosis, symptom R, factor Z,
+external cause V–Y):
+
+```text
+SEQ_DX_SYMPTOM: If a code C is assigned and the code C is a symptom code and a code D is assigned
+                and the code D is a diagnosis code then the code D precedes the code C.
+```
+
+`"Pt with T2DM and CKD. Also HTN. Probable CAP. Cough for three days."` → `E11.22, I12.9, N18.9, R05.9`.
+This is a default order for review; principal-diagnosis selection (Section II) is not modelled.
+
 The language is a coding-rule **subset in the spirit of ACE** and is parsed by this package; it
 does not call the Attempto Parsing Engine. It has no wildcards over code families (E11.9 needs
-one blocking rule per complication code), and sequencing is a simple precedence order.
+one blocking rule per complication code).
 
 ### Performance
 
@@ -208,7 +223,7 @@ Measured on CPU, Python 3.13 (`tests/test_clinical.py::test_index_scales` guards
 | | ms / note | notes / s |
 |---|---|---|
 | linker, 32-entry demo lexicon | 0.14 | ~7,400 |
-| linker + 13 coding rules (Datalog) | 0.30 | ~3,300 |
+| linker + 16 coding rules (Datalog) | 0.30 | ~3,300 |
 | linker, 100,000-entry synthetic lexicon | 0.42 | ~2,400 |
 
 The linker finds candidate entries through hash indexes on each entry's first word: exact

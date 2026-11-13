@@ -27,7 +27,7 @@ def test_parse_and_paraphrase():
 
 @pytest.mark.parametrize("sentence,expected", [
     ("If the patient has hypertension then the code I10 is assigned.", "'a', 'an', 'the' or a variable"),
-    ("If the patient has a hypertension then the code I1 is assigned.", "an ICD-10-CM code"),
+    ("If the patient has a hypertension then the code I1X0 is assigned.", "an ICD-10-CM code"),
     ("If the patient had a hypertension then the code I10 is assigned.", "'has'"),
     ("If the patient has a hypertension then the code I10 is assigned", "'.'"),
     ("If the patient has a diagnosis X then the candidate code of Y is assigned.", "a variable introduced earlier"),
@@ -144,3 +144,32 @@ def test_rule_engine_speed(coder):
 def test_datalog_export(coder):
     text = coder.program.to_text()
     assert "% DM_CKD.1:" in text and 'final(P, C) :- code(P, C), not blocked(P, C).' in text
+
+
+# ---- sequencing -------------------------------------------------------------------
+
+def test_derived_code_takes_place_of_replaced_code(coder):
+    # E11.22 replaces E11.9 (1st finding), I12.9 replaces I10 (3rd); N18.9 follows both;
+    # the symptom code goes after the diagnoses
+    r = coder.code("Pt with T2DM and CKD. Also HTN. Probable CAP. Cough for three days.")
+    assert r.codes == ["E11.22", "I12.9", "N18.9", "R05.9"]
+
+
+def test_symptoms_and_factors_sequenced_last(coder):
+    r = coder.code("Cough for three days. Family history of HTN. Probable CAP. Pt with T2DM and CKD.")
+    assert r.codes == ["E11.22", "N18.9", "R05.9", "Z82.49"]
+    r = coder.code("History of CVA. Headache. Left knee osteoarthritis.")
+    assert r.codes == ["M17.12", "R51.9", "Z86.73"]
+
+
+def test_inpatient_derived_code_sits_at_its_finding(coder):
+    r = coder.code("Cough for three days. Probable CAP. Fever. HTN.", setting="inpatient")
+    assert r.codes == ["J18.9", "I10"] and {"R05.9", "R50.9"} <= set(r.blocked)
+
+
+def test_code_variables_and_kinds_parse():
+    r = parse_rule("If a code C is assigned and the code C is a symptom code and a code D is assigned "
+                   "and the code D is a diagnosis code then the code D precedes the code C.")
+    assert r.paraphrase().endswith("THEN { code D is sequenced before code C }")
+    with pytest.raises(AceError, match="only sequencing may use a code variable"):
+        parse_rule("If a code C is assigned then the code C is not assigned.")

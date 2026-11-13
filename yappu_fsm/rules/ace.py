@@ -19,16 +19,18 @@ Grammar (one rule per sentence)::
               | "the encounter is" ("a"|"an") ("outpatient-encounter" | "inpatient-encounter")
               | "the" (CONCEPT|VAR) "is on the" ("left"|"right") "side"
               | "the" (CONCEPT|VAR) "is on both sides"
-              | "the code" CODE "is" ["not"] "assigned"
+              | "the code" (CODE|VAR) "is" ["not"] "assigned"
+              | "a code" VAR "is assigned"                      (introduces a code variable)
+              | "the code" (CODE|VAR) "is a" KIND "code"       KIND: diagnosis | symptom | factor | external
     conseq   := "the code" CODE "is" ["not"] "assigned"
               | "the candidate code of" VAR "is assigned"
-              | "the code" CODE "precedes the code" CODE
+              | "the code" (CODE|VAR) "precedes the code" (CODE|VAR)
               | "the codes" CODE "and" CODE "conflict"
     subj     := ("a"|"the") "patient"
     term     := ("a"|"an") CONCEPT | ("a"|"an") "diagnosis" VAR | VAR | "the" CONCEPT
 
 Datalog vocabulary produced: patient/1 (implicit in every rule), has/2, uncertain/2, history/2, family/2, setting/2,
-side/3, candidate/3, code/2, blocked/2, precedes/3, conflict/3 and the built-in
+side/3, candidate/3, kind/3, code/2, blocked/2, precedes/3, conflict/3 and the built-in
 ``final(P, C) :- code(P, C), not blocked(P, C).``
 """
 
@@ -46,6 +48,7 @@ CONCEPT_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 P = Var("P")
 SETTINGS = {"outpatient-encounter": "outpatient", "inpatient-encounter": "inpatient"}
 SIDES = {"left": "left", "right": "right", "both": "both"}
+KINDS = ("diagnosis", "symptom", "factor", "external")
 FINAL_RULE = Rule(Literal("final", (P, Var("C"))), [Literal("code", (P, Var("C"))), Literal("blocked", (P, Var("C")), True)],
                   "final", "A code is final if it is assigned and not blocked.")
 
@@ -74,6 +77,7 @@ class Atom:
             "setting": f"the encounter is {a[0]}",
             "side": f"{a[0]} is on side {a[1]}",
             "code": f"code {a[0]} is assigned",
+            "kind": f"code {a[0]} is a {a[1]} code",
             "not_code": f"it is false that code {a[0]} is assigned",
             "assign": f"code {a[0]} is assigned",
             "assign_candidate": f"the candidate code of {a[0]} is assigned",
@@ -164,6 +168,14 @@ class _Parser:
         self.i += 1
         return t
 
+    def code_or_var(self):
+        t = self.peek()
+        if CODE_RE.match(t):
+            return self.code()
+        if VAR_RE.match(t):
+            return self.var()
+        self.fail("an ICD-10-CM code or a code variable")
+
     def concept(self) -> str:
         t = self.peek()
         if not CONCEPT_RE.match(t) or t in ("diagnosis", "uncertain", "history", "patient"):
@@ -225,10 +237,20 @@ class _Parser:
             self.word("a", "an")
             s = self.word(*SETTINGS)
             return Atom("setting", (SETTINGS[s],))
+        if self.at("a code"):
+            self.phrase("a code")
+            v = self.var(introduce=True)
+            self.phrase("is assigned")
+            return Atom("code", (v,))
         if self.at("the code"):
             self.phrase("the code")
-            c = self.code()
+            c = self.code_or_var()
             self.word("is")
+            if self.peek().lower() == "a":
+                self.i += 1
+                k = self.word(*KINDS)
+                self.word("code")
+                return Atom("kind", (c, k))
             neg = self.peek().lower() == "not"
             if neg:
                 self.i += 1
@@ -261,10 +283,12 @@ class _Parser:
             self.word("conflict")
             return Atom("conflict", (a, b))
         self.phrase("the code")
-        c = self.code()
+        c = self.code_or_var()
         if self.peek().lower() == "precedes":
             self.phrase("precedes the code")
-            return Atom("precedes", (c, self.code()))
+            return Atom("precedes", (c, self.code_or_var()))
+        if isinstance(c, Var):
+            self.fail("'precedes' (only sequencing may use a code variable)")
         self.word("is")
         if self.peek().lower() == "not":
             self.i += 1

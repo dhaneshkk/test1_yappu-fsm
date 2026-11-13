@@ -27,3 +27,10 @@ SYMPT_PNA_FEVER: If the code J18.9 is assigned then the code R50.9 is not assign
 # --- Inpatient uncertain diagnoses are coded as if established (Guideline II.H / III.C).
 #     Outpatient (Guideline IV.H) needs no rule: uncertain diagnoses simply get no code.
 INPT_UNCERTAIN: If the encounter is an inpatient-encounter and the patient has an uncertain diagnosis X then the candidate code of X is assigned.
+
+# --- Default sequencing: definitive diagnoses before symptom codes (R), symptoms before
+#     factor/history codes (Z). Guideline I.B.5 / Section IV.D: signs and symptoms are listed
+#     after a related definitive diagnosis; edit these lines to change the house policy.
+SEQ_DX_SYMPTOM: If a code C is assigned and the code C is a symptom code and a code D is assigned and the code D is a diagnosis code then the code D precedes the code C.
+SEQ_DX_FACTOR: If a code C is assigned and the code C is a factor code and a code D is assigned and the code D is a diagnosis code then the code D precedes the code C.
+SEQ_SYMPTOM_FACTOR: If a code C is assigned and the code C is a factor code and a code D is assigned and the code D is a symptom code then the code D precedes the code C.
