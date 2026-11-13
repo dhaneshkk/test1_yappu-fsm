@@ -1,23 +1,133 @@
 {
-  "_comment": "Illustrative ICD-10-CM (US) subset for demos and tests. Verify every code against the official Tabular List before use. E11.* codes presume type 2 diabetes is documented. ICD-10-AM (Australia) codes differ: supply your own lexicon in the same format.",
-  "mild nonproliferative diabetic retinopathy": {
-    "PRESENT_RIGHT": "E11.3291", "PRESENT_LEFT": "E11.3292",
-    "PRESENT_BILATERAL": "E11.3293", "PRESENT_UNSPECIFIED": "E11.3299"
+  "_comment": "ICD-10-CM (US) demo lexicon, FY2025+ code set. Codes were checked against the CM Tabular List structure, but verify against the current official release before production use. E11.* codes presume documented type 2 diabetes. Format: {entity: {ASSERTION_LATERALITY: code | [codes]}}; UNSPECIFIED is the fallback laterality.",
+  "asthma": {
+    "PRESENT_UNSPECIFIED": "J45.909"
   },
-  "diabetic retinopathy": {"PRESENT_UNSPECIFIED": "E11.319"},
-  "diabetic nephropathy": {"PRESENT_UNSPECIFIED": "E11.21"},
-  "type 2 diabetes": {"PRESENT_UNSPECIFIED": "E11.9", "FAMILY_HISTORY_UNSPECIFIED": "Z83.3"},
-  "knee osteoarthritis": {
-    "PRESENT_RIGHT": "M17.11", "PRESENT_LEFT": "M17.12",
-    "PRESENT_BILATERAL": "M17.0", "PRESENT_UNSPECIFIED": "M17.9"
+  "atrial fibrillation": {
+    "PRESENT_UNSPECIFIED": "I48.91"
+  },
+  "carpal tunnel syndrome": {
+    "PRESENT_RIGHT": "G56.01",
+    "PRESENT_LEFT": "G56.02",
+    "PRESENT_BILATERAL": "G56.03",
+    "PRESENT_UNSPECIFIED": "G56.00"
+  },
+  "chest pain": {
+    "PRESENT_UNSPECIFIED": "R07.9"
+  },
+  "chronic kidney disease": {
+    "PRESENT_UNSPECIFIED": "N18.9"
+  },
+  "colon cancer": {
+    "PRESENT_UNSPECIFIED": "C18.9",
+    "HISTORICAL_UNSPECIFIED": "Z85.038",
+    "FAMILY_HISTORY_UNSPECIFIED": "Z80.0"
+  },
+  "copd": {
+    "PRESENT_UNSPECIFIED": "J44.9"
+  },
+  "cough": {
+    "PRESENT_UNSPECIFIED": "R05.9"
+  },
+  "depression": {
+    "PRESENT_UNSPECIFIED": "F32.A"
+  },
+  "diabetic nephropathy": {
+    "PRESENT_UNSPECIFIED": "E11.21"
+  },
+  "diabetic retinopathy": {
+    "PRESENT_UNSPECIFIED": "E11.319"
+  },
+  "fever": {
+    "PRESENT_UNSPECIFIED": "R50.9"
+  },
+  "gerd": {
+    "PRESENT_UNSPECIFIED": "K21.9"
+  },
+  "headache": {
+    "PRESENT_UNSPECIFIED": "R51.9"
+  },
+  "heart failure": {
+    "PRESENT_UNSPECIFIED": "I50.9"
   },
   "hip pain": {
-    "PRESENT_RIGHT": "M25.551", "PRESENT_LEFT": "M25.552",
-    "PRESENT_BILATERAL": ["M25.551", "M25.552"], "PRESENT_UNSPECIFIED": "M25.559"
+    "PRESENT_RIGHT": "M25.551",
+    "PRESENT_LEFT": "M25.552",
+    "PRESENT_BILATERAL": [
+      "M25.551",
+      "M25.552"
+    ],
+    "PRESENT_UNSPECIFIED": "M25.559"
   },
-  "hypertension": {"PRESENT_UNSPECIFIED": "I10", "FAMILY_HISTORY_UNSPECIFIED": "Z82.49"},
-  "shortness of breath": {"PRESENT_UNSPECIFIED": "R06.02"},
-  "chest pain": {"PRESENT_UNSPECIFIED": "R07.9"},
-  "pneumonia": {"PRESENT_UNSPECIFIED": "J18.9"},
-  "myocardial infarction": {"PRESENT_UNSPECIFIED": "I21.9", "HISTORICAL_UNSPECIFIED": "I25.2"}
+  "hyperlipidemia": {
+    "PRESENT_UNSPECIFIED": "E78.5"
+  },
+  "hypertension": {
+    "PRESENT_UNSPECIFIED": "I10",
+    "FAMILY_HISTORY_UNSPECIFIED": "Z82.49"
+  },
+  "knee osteoarthritis": {
+    "PRESENT_RIGHT": "M17.11",
+    "PRESENT_LEFT": "M17.12",
+    "PRESENT_BILATERAL": "M17.0",
+    "PRESENT_UNSPECIFIED": "M17.9"
+  },
+  "knee pain": {
+    "PRESENT_RIGHT": "M25.561",
+    "PRESENT_LEFT": "M25.562",
+    "PRESENT_BILATERAL": [
+      "M25.561",
+      "M25.562"
+    ],
+    "PRESENT_UNSPECIFIED": "M25.569"
+  },
+  "migraine": {
+    "PRESENT_UNSPECIFIED": "G43.909"
+  },
+  "mild nonproliferative diabetic retinopathy": {
+    "PRESENT_RIGHT": "E11.3291",
+    "PRESENT_LEFT": "E11.3292",
+    "PRESENT_BILATERAL": "E11.3293",
+    "PRESENT_UNSPECIFIED": "E11.3299"
+  },
+  "myocardial infarction": {
+    "PRESENT_UNSPECIFIED": "I21.9",
+    "HISTORICAL_UNSPECIFIED": "I25.2"
+  },
+  "nicotine dependence": {
+    "PRESENT_UNSPECIFIED": "F17.210",
+    "HISTORICAL_UNSPECIFIED": "Z87.891"
+  },
+  "obesity": {
+    "PRESENT_UNSPECIFIED": "E66.9"
+  },
+  "pneumonia": {
+    "PRESENT_UNSPECIFIED": "J18.9"
+  },
+  "shortness of breath": {
+    "PRESENT_UNSPECIFIED": "R06.02"
+  },
+  "shoulder pain": {
+    "PRESENT_RIGHT": "M25.511",
+    "PRESENT_LEFT": "M25.512",
+    "PRESENT_BILATERAL": [
+      "M25.511",
+      "M25.512"
+    ],
+    "PRESENT_UNSPECIFIED": "M25.519"
+  },
+  "stroke": {
+    "PRESENT_UNSPECIFIED": "I63.9",
+    "HISTORICAL_UNSPECIFIED": "Z86.73"
+  },
+  "type 1 diabetes": {
+    "PRESENT_UNSPECIFIED": "E10.9"
+  },
+  "type 2 diabetes": {
+    "PRESENT_UNSPECIFIED": "E11.9",
+    "FAMILY_HISTORY_UNSPECIFIED": "Z83.3"
+  },
+  "urinary tract infection": {
+    "PRESENT_UNSPECIFIED": "N39.0"
+  }
 }

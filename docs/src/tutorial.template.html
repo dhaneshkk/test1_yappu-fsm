@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yappu FSM Tutorial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=Noto+Sans+Tamil:wght@400;600;700&family=JetBrains+Mono:wght@400;600&family=Comic+Neue:wght@700&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a sticky chapter rail on the left, one reading column, wide "lab benches"
+   for interactive figures; Ner = turmeric, Nirai = teal everywhere. */
+:root {
+  --paper: #f2f4ef;
+  --card: #ffffff;
+  --ink: #1b2230;
+  --muted: #5d6676;
+  --line: #d9ddd4;
+  --accent: #2f45b8;
+  --ner: #c98a1c;
+  --nirai: #1f8378;
+  --ok: #2b7d47;
+  --bad: #b8352f;
+  --hl: #fff1c9;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Source Serif 4", Georgia, "Noto Serif Tamil", serif;
+  --f-ta: "Noto Sans Tamil", "Latha", "Nirmala UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --f-comic: "Comic Neue", "Comic Sans MS", var(--f-display);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #12161d; --card: #1a202a; --ink: #e5e8ee; --muted: #9aa3b2; --line: #2c3442;
+    --accent: #9aa8ff; --ner: #e9b04b; --nirai: #4cc0b2; --ok: #5cc27e; --bad: #f07a72; --hl: #3a3420;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #12161d; --card: #1a202a; --ink: #e5e8ee; --muted: #9aa3b2; --line: #2c3442;
+  --accent: #9aa8ff; --ner: #e9b04b; --nirai: #4cc0b2; --ok: #5cc27e; --bad: #f07a72; --hl: #3a3420;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { transition: none !important; animation: none !important; } }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.62 var(--f-body); }
+.ta, [lang="ta"] { font-family: var(--f-ta); }
+a { color: var(--accent); }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.shell { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 32px; max-width: 1220px; margin: 0 auto; padding: 0 20px; }
+nav.rail { position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto; padding: 28px 0; font: 14px/1.4 var(--f-display); }
+nav.rail .brand { font-weight: 800; font-size: 19px; margin-bottom: 4px; }
+nav.rail .sub { color: var(--muted); font-size: 12.5px; margin-bottom: 20px; }
+nav.rail ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+nav.rail a { display: grid; grid-template-columns: 26px 1fr; gap: 6px; padding: 6px 8px; border-radius: 6px; color: var(--ink); text-decoration: none; }
+nav.rail a span.n { font-variant-numeric: tabular-nums; color: var(--muted); }
+nav.rail a:hover, nav.rail a.on { background: var(--card); }
+nav.rail a.on span.n { color: var(--accent); font-weight: 700; }
+nav.rail .part { margin: 14px 0 4px 8px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+main { min-width: 0; padding: 28px 0 80px; }
+header.hero { padding: 18px 0 8px; max-width: 760px; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; line-height: 1.15; }
+h1 { font-size: clamp(32px, 4.4vw, 50px); margin: 0 0 12px; font-weight: 800; letter-spacing: -.01em; }
+h2 { font-size: 30px; margin: 0 0 6px; }
+h3 { font-size: 19px; margin: 22px 0 6px; }
+.lede { font-size: 19.5px; color: var(--muted); max-width: 66ch; }
+.legend-row { display: flex; flex-wrap: wrap; gap: 10px 18px; margin: 14px 0 0; font: 14px var(--f-display); color: var(--muted); }
+.sw { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-right: 6px; }
+section.ch { padding: 46px 0 8px; border-top: 1px solid var(--line); margin-top: 38px; scroll-margin-top: 8px; }
+.eyebrow { font: 600 13px var(--f-display); color: var(--accent); letter-spacing: .06em; text-transform: uppercase; }
+.prose { max-width: 66ch; }
+.prose p { margin: 0 0 12px; }
+.bench { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin: 18px 0; overflow-x: auto; }
+.bench h4 { margin: 0 0 10px; font: 700 14px var(--f-display); color: var(--muted); letter-spacing: .03em; text-transform: uppercase; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+input[type=text], textarea, select { font: 18px var(--f-ta); color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+textarea { width: 100%; min-height: 128px; line-height: 1.7; }
+button { font: 600 14px var(--f-display); color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--card); }
+button.chipbtn { font-family: var(--f-ta); font-weight: 600; }
+button[aria-pressed="true"] { background: var(--ink); color: var(--card); border-color: var(--ink); }
+code, .mono { font-family: var(--f-mono); font-size: .86em; }
+pre { font: 13.5px/1.55 var(--f-mono); background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; margin: 8px 0; }
+.ner { --c: var(--ner); }
+.nirai { --c: var(--nirai); }
+.chip { display: inline-flex; flex-direction: column; align-items: center; border: 2px solid var(--c); border-radius: 8px; padding: 4px 10px 2px; min-width: 46px; background: color-mix(in srgb, var(--c) 12%, transparent); }
+.chip b { font: 700 22px var(--f-ta); }
+.chip small { font: 700 11px var(--f-display); color: var(--c); letter-spacing: .05em; }
+.big-binary { font: 700 30px var(--f-mono); letter-spacing: .12em; }
+.big-binary .b1 { color: var(--ner); } .big-binary .b0 { color: var(--nirai); }
+.tag { display: inline-block; font: 700 11.5px var(--f-display); padding: 1px 7px; border-radius: 4px; letter-spacing: .03em; }
+.tag.ok { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.tag.bad { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
+.tag.mute { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }
+table.t { border-collapse: collapse; width: 100%; font: 14px/1.45 var(--f-display); }
+table.t th { text-align: left; font-weight: 700; color: var(--muted); border-bottom: 2px solid var(--line); padding: 6px 8px; }
+table.t td { border-bottom: 1px solid var(--line); padding: 6px 8px; vertical-align: top; font-variant-numeric: tabular-nums; }
+table.t td.ta { font-size: 16px; }
+.comic { margin: 16px 0 6px; }
+.comic svg { width: 100%; height: auto; display: block; }
+.comic figcaption { font: 13px var(--f-display); color: var(--muted); margin-top: 4px; }
+.beats { display: flex; align-items: flex-end; gap: 4px; flex-wrap: wrap; }
+.beat { display: grid; justify-items: center; gap: 4px; }
+.beat .bar { height: 26px; border-radius: 5px; background: var(--c); }
+.beat .lt { font: 700 22px var(--f-ta); }
+.beat .cl { font: 700 11px var(--f-display); color: var(--muted); }
+.grid15 { display: grid; gap: 8px; }
+.vline { display: grid; grid-template-columns: 56px repeat(4, minmax(0, 1fr)); gap: 8px; align-items: stretch; }
+.vline .lab { font: 700 13px var(--f-display); color: var(--muted); align-self: center; }
+.foot { border: 1.5px solid var(--line); border-radius: 9px; padding: 7px 8px; background: var(--paper); min-width: 0; }
+.foot.bad { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 8%, var(--paper)); }
+.foot.cur { outline: 3px solid var(--accent); }
+.foot .w { font: 700 17px var(--f-ta); overflow-wrap: anywhere; }
+.foot .s { font: 13px var(--f-ta); color: var(--muted); }
+.foot .m { font: 600 12px var(--f-display); margin-top: 3px; }
+.foot .r { color: var(--accent); text-decoration: underline 2px; text-underline-offset: 3px; }
+.foot.tn { border-style: dashed; }
+.fsm-wrap { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(260px, 1fr); gap: 16px; }
+.cands { display: flex; flex-wrap: wrap; gap: 6px; max-height: 210px; overflow-y: auto; padding: 2px; }
+.cand { font: 600 15px var(--f-ta); border-radius: 6px; padding: 3px 9px; border: 1px solid var(--line); background: var(--paper); cursor: pointer; }
+.cand.ok { border-color: var(--ok); color: var(--ink); }
+.cand.no { opacity: .5; text-decoration: line-through; cursor: not-allowed; }
+.meter { height: 10px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--ok); }
+.poem-out { font: 600 19px/1.8 var(--f-ta); white-space: pre-line; min-height: 7.2em; }
+.note-raw { font: 16px/1.6 var(--f-body); background: var(--paper); border-radius: 8px; padding: 10px 12px; border: 1px solid var(--line); }
+.stage { display: grid; grid-template-columns: 34px 1fr; gap: 12px; margin: 14px 0; }
+.stage .num { width: 30px; height: 30px; border-radius: 50%; background: var(--ink); color: var(--card); display: grid; place-items: center; font: 700 14px var(--f-display); }
+.clause { border-left: 4px solid var(--line); padding: 6px 10px; margin: 6px 0; background: var(--paper); border-radius: 0 6px 6px 0; font: 15.5px/1.9 var(--f-body); }
+.wall { font: 700 11px var(--f-display); color: var(--muted); letter-spacing: .08em; margin: 2px 0 2px 14px; }
+mark.tr { background: none; border-radius: 4px; padding: 0 3px; font-weight: 700; }
+mark.NEGATED { color: var(--bad); box-shadow: inset 0 -2px var(--bad); }
+mark.UNCERTAIN { color: #9b6a00; box-shadow: inset 0 -2px #d39b22; }
+mark.HISTORICAL { color: var(--accent); box-shadow: inset 0 -2px var(--accent); }
+mark.FAMILY_HISTORY { color: #7a3fa8; box-shadow: inset 0 -2px #9a5cd0; }
+:root[data-theme="dark"] mark.UNCERTAIN, :root[data-theme="dark"] mark.FAMILY_HISTORY { filter: brightness(1.5); }
+mark.ent { background: var(--hl); color: inherit; border-radius: 4px; padding: 1px 3px; font-weight: 600; }
+mark.lat { background: none; outline: 1.5px dashed var(--nirai); border-radius: 4px; padding: 0 3px; color: inherit; }
+.keys { display: flex; flex-wrap: wrap; gap: 5px; }
+.key { font: 600 15px var(--f-mono); width: 34px; height: 36px; border-radius: 6px; border: 1px solid var(--line); background: var(--paper); display: grid; place-items: center; }
+.key.on { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 16%, var(--paper)); cursor: pointer; }
+.key.off { opacity: .35; }
+.typed { font: 600 22px var(--f-mono); min-height: 34px; letter-spacing: .04em; }
+.cm { border-collapse: collapse; font: 13px var(--f-display); font-variant-numeric: tabular-nums; }
+.cm td, .cm th { width: 64px; height: 44px; text-align: center; border: 1px solid var(--line); }
+.cm th { font-weight: 600; color: var(--muted); font-size: 11.5px; }
+.sliders { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px 18px; }
+.sliders label { font: 600 14px var(--f-display); display: grid; gap: 3px; }
+.stat { font: 800 34px var(--f-display); font-variant-numeric: tabular-nums; }
+.stat small { display: block; font: 600 13px var(--f-display); color: var(--muted); }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.callout { border-left: 4px solid var(--accent); padding: 8px 14px; background: var(--card); border-radius: 0 8px 8px 0; margin: 14px 0; max-width: 66ch; }
+.copyrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+footer { margin-top: 60px; color: var(--muted); font-size: 14px; max-width: 66ch; }
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 1fr; }
+  nav.rail { position: static; height: auto; padding-bottom: 0; }
+  nav.rail ol { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .fsm-wrap { grid-template-columns: 1fr; }
+  .vline { grid-template-columns: 40px repeat(4, minmax(0, 1fr)); gap: 5px; }
+}
+@media (max-width: 480px) { body { font-size: 16px; } .vline { grid-template-columns: repeat(2, minmax(0, 1fr)); } .vline .lab { grid-column: 1 / -1; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- Kokku: a patient white crane in a coder's teal scarf (original character) -->
+    <symbol id="kokku" viewBox="0 0 120 170">
+      <path d="M44 156 L48 112 M64 156 L60 112" stroke="#d9a032" stroke-width="4" stroke-linecap="round"/>
+      <path d="M38 158h16M56 158h16" stroke="#d9a032" stroke-width="4" stroke-linecap="round"/>
+      <ellipse cx="54" cy="98" rx="34" ry="22" fill="#fbfbf8" stroke="#1b2230" stroke-width="3"/>
+      <path d="M28 96 q-14 10 -6 22 q12 -2 20 -12" fill="#e9ecef" stroke="#1b2230" stroke-width="3"/>
+      <path d="M74 86 C86 66 70 52 74 34" fill="none" stroke="#1b2230" stroke-width="14" stroke-linecap="round"/>
+      <path d="M74 86 C86 66 70 52 74 34" fill="none" stroke="#fbfbf8" stroke-width="8" stroke-linecap="round"/>
+      <circle cx="78" cy="28" r="14" fill="#fbfbf8" stroke="#1b2230" stroke-width="3"/>
+      <path d="M90 26 L116 32 L90 34 Z" fill="#e3a52f" stroke="#1b2230" stroke-width="2.5" stroke-linejoin="round"/>
+      <circle cx="82" cy="25" r="2.6" fill="#1b2230"/>
+      <circle cx="82" cy="25" r="6" fill="none" stroke="#1b2230" stroke-width="1.8"/>
+      <path d="M66 18 q8 -10 16 -6" fill="none" stroke="#1b2230" stroke-width="3" stroke-linecap="round"/>
+      <path d="M64 70 q12 8 22 0 l-2 10 q-9 5 -19 -1 z" fill="#1f8378" stroke="#1b2230" stroke-width="2"/>
+    </symbol>
+    <!-- Mathi: the crescent moon who asks questions -->
+    <symbol id="mathi" viewBox="0 0 120 120">
+      <path d="M78 10 A52 52 0 1 0 78 110 A40 40 0 1 1 78 10 Z" fill="#f4d36b" stroke="#1b2230" stroke-width="3"/>
+      <circle cx="40" cy="52" r="3.5" fill="#1b2230"/>
+      <path d="M32 72 q8 8 18 2" fill="none" stroke="#1b2230" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="30" cy="64" r="5" fill="#f2a28a" opacity=".7"/>
+    </symbol>
+    <!-- Ezhu: a letter sprite (the letter is drawn in per panel) -->
+    <symbol id="ezhu" viewBox="0 0 100 110">
+      <path d="M34 96 v10 M64 96 v10" stroke="#1b2230" stroke-width="5" stroke-linecap="round"/>
+      <rect x="10" y="10" width="80" height="86" rx="24" fill="var(--sprite, #c98a1c)" stroke="#1b2230" stroke-width="3"/>
+      <circle cx="36" cy="36" r="5" fill="#fff" stroke="#1b2230" stroke-width="2"/><circle cx="37" cy="37" r="2" fill="#1b2230"/>
+      <circle cx="64" cy="36" r="5" fill="#fff" stroke="#1b2230" stroke-width="2"/><circle cx="65" cy="37" r="2" fill="#1b2230"/>
+    </symbol>
+    <!-- Bit: a small language-model robot -->
+    <symbol id="bit" viewBox="0 0 110 130">
+      <path d="M55 6 v14" stroke="#1b2230" stroke-width="3"/><circle cx="55" cy="6" r="5" fill="#b8352f" stroke="#1b2230" stroke-width="2"/>
+      <rect x="14" y="20" width="82" height="62" rx="14" fill="#c8d2f5" stroke="#1b2230" stroke-width="3"/>
+      <rect x="26" y="34" width="58" height="30" rx="8" fill="#1b2230"/>
+      <circle cx="44" cy="49" r="5" fill="#7ef0c8"/><circle cx="66" cy="49" r="5" fill="#7ef0c8"/>
+      <rect x="28" y="86" width="54" height="34" rx="8" fill="#aebbe9" stroke="#1b2230" stroke-width="3"/>
+      <path d="M28 98 h-12 M82 98 h12" stroke="#1b2230" stroke-width="4" stroke-linecap="round"/>
+      <text x="55" y="110" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" font-weight="700" fill="#1b2230">LLM</text>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="shell">
+<nav class="rail" aria-label="Chapters">
+  <div class="brand">Yappu FSM</div>
+  <div class="sub">From Tamil meter to safe ICD-10-CM coding</div>
+  <ol id="toc">
+    <li class="part">Part I · The poetry engine</li>
+    <li><a href="#beats"><span class="n">01</span>Beats</a></li>
+    <li><a href="#asai"><span class="n">02</span>Asai</a></li>
+    <li><a href="#seer"><span class="n">03</span>Seer</a></li>
+    <li><a href="#thalai"><span class="n">04</span>Thalai</a></li>
+    <li><a href="#venba"><span class="n">05</span>The Venba</a></li>
+    <li><a href="#rhyme"><span class="n">06</span>Rhyme</a></li>
+    <li class="part">Part II · Machines</li>
+    <li><a href="#decoding"><span class="n">07</span>Constrained decoding</a></li>
+    <li><a href="#bytes"><span class="n">08</span>Bytes and tokens</a></li>
+    <li class="part">Part III · The clinic</li>
+    <li><a href="#clinic"><span class="n">09</span>Reading a chart</a></li>
+    <li><a href="#icd"><span class="n">10</span>Safe code emission</a></li>
+    <li><a href="#mcc"><span class="n">11</span>Measuring with MCC</a></li>
+    <li><a href="#run"><span class="n">12</span>Run it yourself</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="hero">
+  <div class="eyebrow">An interactive tutorial for yappu-fsm</div>
+  <h1>How a 2,000-year-old meter teaches machines to stay in line</h1>
+  <p class="lede">Tamil prosody turns poetry into a finite-state machine. This tutorial builds that machine one rule at a time, uses it to steer a language model, and then applies the same idea to reading patient charts and emitting ICD-10-CM codes that cannot be invented.</p>
+  <div class="legend-row">
+    <span><i class="sw" style="background:var(--ner)"></i>Ner asai (1)</span>
+    <span><i class="sw" style="background:var(--nirai)"></i>Nirai asai (0)</span>
+    <span><i class="sw" style="background:var(--ok)"></i>allowed</span>
+    <span><i class="sw" style="background:var(--bad)"></i>blocked</span>
+  </div>
+  <figure class="comic" id="strip0"></figure>
+</header>
+
+<!-- ══════════════ 01 BEATS ══════════════ -->
+<section class="ch" id="beats">
+  <div class="eyebrow">Chapter 01 · Mathirai</div>
+  <h2>Every letter has a duration</h2>
+  <figure class="comic" id="strip1"></figure>
+  <div class="prose">
+    <p>Tamil meter is <em>quantitative</em>. A short letter (<span class="ta">குறில்</span>, kuril) lasts 1 mathirai, a long letter (<span class="ta">நெடில்</span>, nedil) lasts 2, and a dotted consonant (<span class="ta">ஒற்று</span>, otru) lasts ½. One mathirai is traditionally the time of a blink or a finger snap.</p>
+  </div>
+  <div class="bench">
+    <h4>Beat meter</h4>
+    <div class="row"><label for="beatIn" class="mono">word</label><input id="beatIn" type="text" value="கூடினால்" lang="ta" size="16">
+      <span class="row" id="beatEx"></span></div>
+    <div class="beats" id="beatOut" style="margin-top:14px"></div>
+    <p id="beatSum" class="mono" style="margin:10px 0 0"></p>
+  </div>
+</section>
+
+<!-- ══════════════ 02 ASAI ══════════════ -->
+<section class="ch" id="asai">
+  <div class="eyebrow">Chapter 02 · Asai</div>
+  <h2>Letters pair up into Ner and Nirai</h2>
+  <figure class="comic" id="strip2"></figure>
+  <div class="prose">
+    <p>Letters group into metrical syllables called asai. The rules are short enough to fit on a card:</p>
+    <ol>
+      <li>A long letter always closes its own <b style="color:var(--ner)">Ner</b>.</li>
+      <li>A short letter followed by a short or long letter joins it in one <b style="color:var(--nirai)">Nirai</b>.</li>
+      <li>A short letter on its own is a <b style="color:var(--ner)">Ner</b>.</li>
+      <li>Dotted consonants attach to whatever came before.</li>
+    </ol>
+    <p>Write Ner as <code>1</code> and Nirai as <code>0</code>, and every word becomes a short binary string. Rule 2 is the one most often got wrong: <span class="ta">கூடினால்</span> is <span class="ta">கூ/டினால்</span> (<code>10</code>), not three syllables.</p>
+  </div>
+  <div class="bench">
+    <h4>Asai splitter</h4>
+    <div class="row"><label for="asaiIn" class="mono">word</label><input id="asaiIn" type="text" value="இலக்கணம்" lang="ta" size="16">
+      <span class="row" id="asaiEx"></span></div>
+    <div class="row" id="asaiOut" style="margin-top:14px; gap:8px"></div>
+    <div class="row" style="margin-top:10px; gap:18px"><span class="big-binary" id="asaiBin"></span><span id="asaiSeer" style="font:600 16px var(--f-display)"></span></div>
+  </div>
+</section>
+
+<!-- ══════════════ 03 SEER ══════════════ -->
+<section class="ch" id="seer">
+  <div class="eyebrow">Chapter 03 · Seer</div>
+  <h2>Binary strings name the metrical feet</h2>
+  <div class="prose">
+    <p>A metrical foot (<span class="ta">சீர்</span>) is a word read as its asai string. With one, two or three asai there are 2, 4 and 8 possibilities, and each has a name (vaipadu) that is itself a word with that rhythm: <span class="ta">தேமா</span> (Thema) is <code>11</code>, <span class="ta">புளிமா</span> (Pulima) is <code>01</code>. A Venba may only use the two-asai feet and the four three-asai feet ending in Ner; the four ending in Nirai (Kanicheer) are forbidden.</p>
+  </div>
+  <div class="bench"><h4>The asai tree (click a leaf to try a sample word)</h4><div id="tree"></div><p id="treeNote" class="mono" style="margin:6px 0 0"></p></div>
+</section>
+
+<!-- ══════════════ 04 THALAI ══════════════ -->
+<section class="ch" id="thalai">
+  <div class="eyebrow">Chapter 04 · Thalai</div>
+  <h2>A three-state machine decides which word may come next</h2>
+  <figure class="comic" id="strip3"></figure>
+  <div class="prose">
+    <p>Thalai (<span class="ta">தளை</span>, binding) is the rule linking the end of one foot to the start of the next. For a Venba it reduces to a tiny state machine:</p>
+    <ul>
+      <li>after a Maa foot (ends in Ner), the next foot must <b>start with Nirai</b> (Iyarseer Vendalai);</li>
+      <li>after a Vilam foot (ends in Nirai), it must <b>start with Ner</b> (Iyarseer Vendalai);</li>
+      <li>after a Kay foot (three asai ending in Ner), it must <b>start with Ner</b> (Venseer Vendalai).</li>
+    </ul>
+    <p>Anything else is a different meter's linking and breaks the conversational rhythm (Seppalosai) of the Venba.</p>
+  </div>
+  <div class="bench">
+    <h4>Step through a poem</h4>
+    <div class="row" style="margin-bottom:10px">
+      <label for="fsmPoem" class="mono">poem</label>
+      <select id="fsmPoem"><option value="0">Poem II · night sky</option><option value="1">Poem I · music</option><option value="2">Nanneri · the crane</option><option value="3">Broken poem</option></select>
+      <button id="fsmPrev">◀ Back</button><button id="fsmNext" class="primary">Step ▶</button><button id="fsmPlay">Play</button>
+    </div>
+    <div class="fsm-wrap"><div id="fsmSvg"></div><div id="fsmInfo" class="prose" style="font-size:15.5px"></div></div>
+    <div id="fsmGrid" class="grid15" style="margin-top:14px"></div>
+  </div>
+</section>
+
+<!-- ══════════════ 05 VENBA ══════════════ -->
+<section class="ch" id="venba">
+  <div class="eyebrow">Chapter 05 · Nerisai Venba</div>
+  <h2>Fifteen feet, one blueprint, one validator</h2>
+  <div class="prose">
+    <p>A Nerisai Venba has four lines of 4, 4, 4 and 3 feet. The fourth foot of line 2 is the <b>Thanichol</b>, set off by a dash, and it must rhyme with lines 1 and 2. The final foot (<b>Eetrucheer</b>) is a single asai (Naal, Malar) or one followed by a short final <i>u</i> on a hard consonant (Kaasu, Pirappu), as in <span class="ta">கொக்கு</span>. Every one of the 14 links must be Vendalai.</p>
+    <p>Edit the text below. The validator is the same logic as <code>yappu validate</code>, ported to JavaScript and tested against the Python version.</p>
+  </div>
+  <div class="bench">
+    <h4>Validator</h4>
+    <div class="row" style="margin-bottom:8px" id="vPresets"></div>
+    <label for="vIn" class="mono" style="display:block;margin-bottom:4px">poem text</label>
+    <textarea id="vIn" lang="ta" spellcheck="false"></textarea>
+    <div id="vVerdict" style="margin:12px 0 8px; font:700 18px var(--f-display)"></div>
+    <div id="vGrid" class="grid15"></div>
+    <ul id="vErr" style="color:var(--bad); font:14px var(--f-display); margin:10px 0 0"></ul>
+  </div>
+</section>
+
+<!-- ══════════════ 06 RHYME ══════════════ -->
+<section class="ch" id="rhyme">
+  <div class="eyebrow">Chapter 06 · Ethukai and Monai</div>
+  <h2>Rhyme on the second letter, alliteration on the first</h2>
+  <div class="prose">
+    <p><b>Ethukai</b> (<span class="ta">எதுகை</span>) compares line-opening words on their second letter: the second letters share a consonant and the first letters have the same length. That is why <span class="ta">அடக்க</span> and <span class="ta">மடைத்தலையில்</span> rhyme (ட / டை), while an exact-letter check would wrongly reject them.</p>
+    <p><b>Monai</b> (<span class="ta">மோனை</span>) is alliteration on the first letter, with traditional equivalence groups (Ina Ezhuthu): vowels அ ஆ ஐ ஔ, இ ஈ எ ஏ, உ ஊ ஒ ஓ, and the consonant pairs ச/த, ஞ/ந, ம/வ. In the decoder it is a soft bonus, never a hard rule.</p>
+  </div>
+  <div class="bench">
+    <h4>Compare two words</h4>
+    <div class="row"><label for="rA" class="mono">A</label><input id="rA" type="text" value="அடக்க" lang="ta" size="12">
+      <label for="rB" class="mono">B</label><input id="rB" type="text" value="மடைத்தலையில்" lang="ta" size="12"></div>
+    <div class="two" id="rOut" style="margin-top:14px"></div>
+  </div>
+</section>
+
+<!-- ══════════════ 07 DECODING ══════════════ -->
+<section class="ch" id="decoding">
+  <div class="eyebrow">Chapter 07 · Constrained decoding</div>
+  <h2>Give the model only words that keep the poem valid</h2>
+  <figure class="comic" id="strip4"></figure>
+  <div class="prose">
+    <p>A language model scores every possible next token. A <em>logits processor</em> can set a score to −∞ before sampling, which removes that option. <code>VenbaLogitsProcessor</code> removes every option that would break Vendalai, the rhyme, or the final-foot rule. It also looks ahead and removes words that would leave no way to finish the poem, so generation never dead-ends.</p>
+    <p>Below, you play the model: pick any green word. The grey ones are what the processor masks, with the reason. The word list is the package's sample lexicon.</p>
+  </div>
+  <div class="bench">
+    <h4>You are the language model</h4>
+    <div class="row" style="justify-content:space-between">
+      <div class="row"><button id="dPick" class="primary">Random allowed word</button><button id="dAuto">Finish the poem</button><button id="dUndo">Undo</button><button id="dReset">Reset</button></div>
+      <label class="row" style="font:600 14px var(--f-display)"><input type="checkbox" id="dShowMasked" checked> show masked words</label>
+    </div>
+    <div class="two" style="margin-top:14px">
+      <div>
+        <div class="mono" id="dFoot" style="margin-bottom:6px"></div>
+        <div class="meter" aria-hidden="true"><i id="dMeter"></i></div>
+        <div class="mono" id="dCount" style="margin:4px 0 8px; font-size:13px; color:var(--muted)"></div>
+        <div class="cands" id="dCands" role="list"></div>
+      </div>
+      <div>
+        <div class="poem-out" id="dPoem" lang="ta"></div>
+        <div id="dVerdict" style="font:700 15px var(--f-display); margin-top:6px"></div>
+      </div>
+    </div>
+  </div>
+  <div class="callout">The real processor does this at the level of bytes, so it also works when a model's tokens split a Tamil letter in half. The next chapter shows why that matters.</div>
+</section>
+
+<!-- ══════════════ 08 BYTES ══════════════ -->
+<section class="ch" id="bytes">
+  <div class="eyebrow">Chapter 08 · Bytes and tokens</div>
+  <h2>Why the checks run on whole words, not tokens</h2>
+  <div class="prose">
+    <p>Models do not see letters. They see tokens, and for Tamil a token is often a fragment: a consonant without its vowel sign, or a lone pulli. The asai of a fragment means nothing. So each vocabulary token is mapped to its raw UTF-8 bytes, and the processor walks a <b>byte trie of whole allowed words</b>. A token is allowed if appending its bytes keeps the text on a path that can still be completed.</p>
+    <p>These are real splits from the tiny byte-level BPE tokenizer the tests train (<span id="vocabN"></span> tokens):</p>
+  </div>
+  <div class="bench"><h4>Tokenizer splits</h4><div id="tokOut"></div></div>
+</section>
+
+<!-- ══════════════ 09 CLINIC ══════════════ -->
+<section class="ch" id="clinic">
+  <div class="eyebrow">Chapter 09 · The same machine, in a clinic</div>
+  <h2>Reading a chart: walls, triggers and sides</h2>
+  <figure class="comic" id="strip5"></figure>
+  <div class="prose">
+    <p>A clinical note has its own grammar. “Denies SOB, <b>but</b> has HTN” negates the first finding and not the second, much as a Sandhi boundary separates two words. The linker runs five stages, all traced below from the Python code, for ICD-10-CM (US).</p>
+  </div>
+  <div class="bench">
+    <h4>Pipeline trace</h4>
+    <div class="row" style="margin-bottom:6px">
+      <label for="cNote" class="mono">note</label><select id="cNote" style="font:15px var(--f-body); max-width:100%"></select>
+    </div>
+    <div class="row" style="margin-bottom:8px" role="group" aria-label="Coding setting">
+      <span class="mono">setting</span>
+      <button id="cOut" aria-pressed="true">Outpatient · Guideline IV.H</button>
+      <button id="cIn" aria-pressed="false">Inpatient · Guideline II.H</button>
+    </div>
+    <div id="cTrace"></div>
+  </div>
+  <div class="legend-row">
+    <span><mark class="tr NEGATED">negation</mark></span><span><mark class="tr UNCERTAIN">uncertain</mark></span>
+    <span><mark class="tr HISTORICAL">history</mark></span><span><mark class="tr FAMILY_HISTORY">family history</mark></span>
+    <span><mark class="ent">entity</mark></span><span><mark class="lat">laterality</mark></span>
+  </div>
+</section>
+
+<!-- ══════════════ 10 ICD ══════════════ -->
+<section class="ch" id="icd">
+  <div class="eyebrow">Chapter 10 · Safe code emission</div>
+  <h2>A trie that makes invented codes impossible</h2>
+  <div class="prose">
+    <p>When a model writes codes after <code>CODES:</code>, <code>ICD10LogitsProcessor</code> allows only characters that continue one of the codes the linker found, plus <code>;</code> once a code is complete and EOS at the end. A code already written cannot be started again. Type with the keys below; dimmed keys are masked to −∞.</p>
+  </div>
+  <div class="bench">
+    <h4>Type a code list</h4>
+    <div class="mono" id="kAllowed" style="margin-bottom:8px"></div>
+    <div class="typed" id="kTyped" aria-live="polite"></div>
+    <div class="keys" id="kKeys" style="margin:10px 0"></div>
+    <div class="row"><button id="kAuto" class="primary">Let the model type</button><button id="kReset">Clear</button><span id="kStatus" style="font:600 14px var(--f-display)"></span></div>
+  </div>
+</section>
+
+<!-- ══════════════ 11 MCC ══════════════ -->
+<section class="ch" id="mcc">
+  <div class="eyebrow">Chapter 11 · Evaluation</div>
+  <h2>Measuring with the Matthews correlation coefficient</h2>
+  <figure class="comic" id="strip6"></figure>
+  <div class="prose">
+    <p>Accuracy flatters a system when one class dominates. MCC uses the whole confusion matrix, ranges from −1 to +1, and is 0 for guessing. Below is the real assertion confusion matrix on the package's 20-note synthetic gold set. It is a regression check, not a clinical validation.</p>
+  </div>
+  <div class="bench">
+    <h4>Assertion confusion matrix (rows: gold, columns: predicted)</h4>
+    <div class="two"><div id="cmOut"></div><div id="cmStats"></div></div>
+  </div>
+  <div class="bench">
+    <h4>Why not accuracy? Try an imbalanced case</h4>
+    <div class="sliders" id="mSl"></div>
+    <div class="two" style="margin-top:12px"><div class="stat" id="mAcc"></div><div class="stat" id="mMcc"></div></div>
+    <p class="prose" style="margin:8px 0 0; font-size:15px; color:var(--muted)">Binary MCC = (TP·TN − FP·FN) / √((TP+FP)(TP+FN)(TN+FP)(TN+FN)). The package uses the multiclass form (Gorodkin), which equals this for two classes.</p>
+  </div>
+</section>
+
+<!-- ══════════════ 12 RUN ══════════════ -->
+<section class="ch" id="run">
+  <div class="eyebrow">Chapter 12 · Run it yourself</div>
+  <h2>One Colab cell, one CLI, one endpoint</h2>
+  <div class="prose">
+    <p><b>Colab.</b> Open <code>notebooks/yappu_fsm_colab_single_cell.ipynb</code> in Colab and run its only cell. The whole package is embedded in it: it writes the files, runs the test suite, validates a Venba, codes a note, runs constrained decoding through <code>model.generate()</code>, and starts the endpoint. Switch <code>CODING_SETTING</code> to <code>"inpatient"</code> at the top to apply Guideline II.H.</p>
+  </div>
+  <div class="bench">
+    <div class="copyrow"><h4>Command line</h4><button data-copy="cli">Copy</button></div>
+<pre id="cli">pip install -e ".[hf,dev]"
+yappu asai கூடினால் இலக்கணம் கொக்கு
+yappu validate "வண்ண நிலவொளி வானில் தவழ்ந்திட ..."
+yappu code "Probable pneumonia. Rt CTS." --setting inpatient
+yappu eval
+yappu demo-decode
+yappu serve --port 8000</pre>
+    <div class="copyrow"><h4>OpenAI-compatible endpoint</h4><button data-copy="api">Copy</button></div>
+<pre id="api">from openai import OpenAI
+c = OpenAI(base_url="http://localhost:8000/v1", api_key="unused")
+r = c.chat.completions.create(
+    model="yappu-icd-linker",
+    messages=[{"role": "user", "content": "Denies SOB, but has uncontrolled HTN."}],
+    extra_body={"setting": "outpatient"})
+print(r.choices[0].message.content)   # findings + allowed_codes</pre>
+    <div class="copyrow"><h4>Constrain any Hugging Face model</h4><button data-copy="hf">Copy</button></div>
+<pre id="hf">from transformers import LogitsProcessorList
+from yappu_fsm.decoding import ICD10LogitsProcessor
+allowed = linker.allowed_codes(linker.process(note))
+proc = ICD10LogitsProcessor(tokenizer, allowed)
+out = model.generate(**tokenizer(f"Note: {note}\nCODES:", return_tensors="pt"),
+                     logits_processor=LogitsProcessorList([proc]), max_new_tokens=40)</pre>
+  </div>
+  <div class="callout">What the processors guarantee: every completed output is in the allowed language. A Venba always validates, and every code comes from the linker's allowed set without repeats. They do not make a code clinically right; a certified coder reviews the output.</div>
+  <footer>Built from the yappu-fsm repository. Every figure on this page comes from the package's code or its exported traces. ICD-10-CM codes are a demo subset; verify against the current CMS release. Characters: Kokku the crane (after the patient crane in the Nanneri verse), Mathi the moon, Ezhu the letter, Bit the model. All original.</footer>
+</section>
+</main>
+</div>
+
+<script>/*__PROSODY_JS__*/</script>
+<script>const DATA = /*__DATA_JSON__*/;</script>
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const el = (tag, attrs = {}, html = "") => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (html) e.innerHTML = html; return e; };
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+const POEMS = [
+  "வண்ண நிலவொளி வானில் தவழ்ந்திட\nஎண்ணற்ற விண்மீன்கள் ஏற்றிடும் - விண்ணில்\nஇருளினை நீக்கும் இனிய ஒளியால்\nமருளினை மாற்றும் மதி.",
+  "எண்ணும் எழுத்தும் இசையோடு கூடினால்\nபண்ணும் மணியாகும் பார்ப்பவர் - கண்ணும்\nஅமுதத் தமிழில் அமைந்த இலக்கணம்\nநம்மொழி யாக்கும் இசை.",
+  "அடக்க முடையா ரறிவிலரென் றெண்ணிக்\nகடக்கக் கருதவும் வேண்டா - மடைத்தலையில்\nஓடுமீ னோட உறுமீன் வருமளவும்\nவாடி யிருக்குமாம் கொக்கு.",
+  "வண்ண வானில் வானில் தவழ்ந்திட\nஎண்ணற்ற விண்மீன்கள் ஏற்றிடும் - கண்ணில்\nஇருளினை நீக்கும் இனிய ஒளியால்\nநிலவொளி மாற்றும் மதி."
+];
+const POEM_NAMES = ["Poem II · night sky", "Poem I · music", "Nanneri · the crane", "Broken poem"];
+
+/* ───────────── comics ───────────── */
+function wrap(text, max) {
+  const words = text.split(" "), lines = []; let cur = "";
+  for (const w of words) { if ((cur + " " + w).trim().length > max) { lines.push(cur.trim()); cur = w; } else cur += " " + w; }
+  if (cur.trim()) lines.push(cur.trim());
+  return lines;
+}
+function comic(id, title, panels) {
+  const W = 300, H = 210, gap = 12, n = panels.length, total = n * W + (n - 1) * gap;
+  let s = `<svg viewBox="0 0 ${total} ${H}" role="img" aria-label="${esc(title)}"><title>${esc(title)}</title>`;
+  panels.forEach((p, i) => {
+    const x0 = i * (W + gap);
+    s += `<g transform="translate(${x0},0)"><rect x="1.5" y="1.5" width="${W - 3}" height="${H - 3}" rx="10" fill="${p.bg}" stroke="#1b2230" stroke-width="3"/>`;
+    if (p.ground) s += `<path d="M3 ${H - 34} Q ${W / 2} ${H - 46} ${W - 3} ${H - 34} L ${W - 3} ${H - 4} L 3 ${H - 4} Z" fill="${p.ground}" opacity=".9"/>`;
+    (p.deco || []).forEach((d) => (s += d));
+    (p.cast || []).forEach((c) => {
+      const flip = c.flip ? ` translate(${c.w},0) scale(-1,1)` : "";
+      s += `<g transform="translate(${c.x},${c.y})${flip}" style="--sprite:${c.color || "#c98a1c"}"><use href="#${c.who}" width="${c.w}" height="${c.h}"/></g>`;
+      if (c.letter) s += `<text x="${c.x + c.w / 2}" y="${c.y + c.h * 0.74}" text-anchor="middle" font-family="Noto Sans Tamil, sans-serif" font-weight="700" font-size="${c.w * 0.36}" fill="#1b2230">${c.letter}</text>`;
+    });
+    (p.say || []).forEach((b0) => { let b = b0;
+      const lines = wrap(b.t, b.max || 26), lh = 15, longest = Math.max(...lines.map((l) => l.length));
+      const bw = Math.min(W - 16, Math.max(b.w || 0, longest * 7.1 + 24)), bh = lines.length * lh + 14;
+      b = { ...b, x: Math.max(8, Math.min(b.x, W - 8 - bw)) };
+      s += `<path d="M${b.x + bw * 0.3} ${b.y + bh - 2} L ${b.tx} ${b.ty} L ${b.x + bw * 0.5} ${b.y + bh - 2}" fill="#fff" stroke="#1b2230" stroke-width="2.2" stroke-linejoin="round"/>`;
+      s += `<rect x="${b.x}" y="${b.y}" width="${bw}" height="${bh}" rx="12" fill="#fff" stroke="#1b2230" stroke-width="2.2"/>`;
+      s += `<path d="M${b.x + bw * 0.3 + 2} ${b.y + bh - 2} L ${b.x + bw * 0.5 - 2} ${b.y + bh - 2}" stroke="#fff" stroke-width="4"/>`;
+      lines.forEach((ln, k) => (s += `<text x="${b.x + bw / 2}" y="${b.y + 20 + k * lh}" text-anchor="middle" font-family="Comic Neue, Comic Sans MS, sans-serif" font-weight="700" font-size="13" fill="#1b2230">${esc(ln)}</text>`));
+    });
+    if (p.cap) s += `<rect x="1.5" y="1.5" width="${W - 3}" height="22" rx="10" fill="#1b2230"/><text x="12" y="17" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="12" fill="#fff">${esc(p.cap)}</text>`;
+    s += `</g>`;
+  });
+  s += `</svg>`;
+  const f = document.getElementById(id);
+  f.innerHTML = s + `<figcaption>${esc(title)}</figcaption>`;
+}
+const WATER = "#bfe3e0", NIGHT = "#2a3557", DAY = "#eaf3f7", PAPER = "#fbf6e6", LAB = "#eef0fb", WARD = "#eaf5ee";
+const stars = (n, seed) => { let s = ""; for (let i = 0; i < n; i++) { const x = 20 + ((i * 97 + seed * 31) % 260), y = 30 + ((i * 53 + seed * 17) % 90); s += `<circle cx="${x}" cy="${y}" r="${1 + (i % 3) * 0.6}" fill="#fff" opacity=".85"/>`; } return s; };
+function drawComics() {
+  comic("strip0", "Prologue · Kokku waits for the right fish", [
+    { bg: DAY, ground: WATER, cap: "Prologue", cast: [{ who: "kokku", x: 150, y: 30, w: 110, h: 156 }],
+      say: [{ x: 16, y: 34, w: 150, t: "I stand still and let the small fish pass.", tx: 160, ty: 70 }] },
+    { bg: NIGHT, deco: [stars(14, 1)], cast: [{ who: "mathi", x: 186, y: 26, w: 92, h: 92 }, { who: "kokku", x: 20, y: 46, w: 100, h: 142 }],
+      say: [{ x: 120, y: 120, w: 170, t: "Kokku, why do old Tamil poems sound like music?", tx: 200, ty: 110 }] },
+    { bg: PAPER, cast: [{ who: "kokku", x: 12, y: 40, w: 104, h: 148 }, { who: "ezhu", x: 196, y: 102, w: 80, h: 88, letter: "அ" }],
+      say: [{ x: 110, y: 26, w: 180, t: "Because their grammar is a machine. Let us build it, one rule at a time.", tx: 100, ty: 64, max: 30 }] },
+  ]);
+  comic("strip1", "Strip 1 · Counting beats", [
+    { bg: PAPER, cap: "1", cast: [{ who: "ezhu", x: 30, y: 96, w: 84, h: 92, letter: "க" }, { who: "ezhu", x: 170, y: 96, w: 100, h: 92, letter: "கா", color: "#e0b45a" }],
+      say: [{ x: 14, y: 30, w: 120, t: "I am short: 1 beat.", tx: 70, ty: 96 }, { x: 156, y: 30, w: 132, t: "I am long: 2 beats!", tx: 216, ty: 96 }] },
+    { bg: PAPER, cap: "2", cast: [{ who: "ezhu", x: 110, y: 112, w: 70, h: 76, letter: "க்", color: "#b9c3cf" }],
+      say: [{ x: 70, y: 34, w: 160, t: "I have a dot, so I only get half a beat.", tx: 145, ty: 112 }] },
+    { bg: NIGHT, deco: [stars(10, 3)], cap: "3", cast: [{ who: "mathi", x: 20, y: 40, w: 96, h: 96 }],
+      say: [{ x: 120, y: 44, w: 166, t: "So every word has a measurable length, like notes in music.", tx: 100, ty: 80, max: 24 }] },
+  ]);
+  comic("strip2", "Strip 2 · Letters hold hands", [
+    { bg: PAPER, cap: "1", cast: [{ who: "ezhu", x: 60, y: 100, w: 80, h: 88, letter: "டி", color: "#4cb4a8" }, { who: "ezhu", x: 140, y: 100, w: 90, h: 88, letter: "னா", color: "#4cb4a8" }],
+      say: [{ x: 50, y: 28, w: 200, t: "Short + long hold hands: we are one Nirai.", tx: 150, ty: 100, max: 30 }] },
+    { bg: PAPER, cap: "2", cast: [{ who: "ezhu", x: 112, y: 100, w: 84, h: 88, letter: "கூ" }],
+      say: [{ x: 60, y: 30, w: 180, t: "I am long, so I stand alone: a Ner.", tx: 150, ty: 100 }] },
+    { bg: DAY, ground: WATER, cap: "3", cast: [{ who: "kokku", x: 160, y: 34, w: 106, h: 150 }],
+      say: [{ x: 12, y: 30, w: 160, t: "கூ / டினால் is 1 then 0. Two feet of rhythm, not three.", tx: 168, ty: 64, max: 24 }] },
+  ]);
+  comic("strip3", "Strip 3 · The gatekeeper", [
+    { bg: NIGHT, deco: [stars(12, 5), `<rect x="120" y="70" width="60" height="110" rx="6" fill="#5b6a94" stroke="#1b2230" stroke-width="3"/><text x="150" y="132" text-anchor="middle" font-family="JetBrains Mono" font-weight="700" font-size="22" fill="#fff">0?</text>`], cap: "1",
+      cast: [{ who: "mathi", x: 196, y: 20, w: 90, h: 90 }],
+      say: [{ x: 12, y: 32, w: 150, t: "After a Maa foot, only Nirai may pass.", tx: 130, ty: 80 }] },
+    { bg: NIGHT, deco: [stars(8, 6)], cap: "2", cast: [{ who: "ezhu", x: 40, y: 100, w: 80, h: 88, letter: "வா" }, { who: "mathi", x: 186, y: 40, w: 90, h: 90 }],
+      say: [{ x: 126, y: 136, w: 160, t: "வானில் starts with Ner. Blocked!", tx: 210, ty: 128 }] },
+    { bg: DAY, ground: WATER, cap: "3", cast: [{ who: "kokku", x: 10, y: 36, w: 104, h: 150 }],
+      say: [{ x: 116, y: 36, w: 172, t: "Three states, simple rules, and the rhythm can never drift.", tx: 100, ty: 72, max: 24 }] },
+  ]);
+  comic("strip4", "Strip 4 · Bit meets the sieve", [
+    { bg: LAB, cap: "1", cast: [{ who: "bit", x: 180, y: 60, w: 100, h: 118 }],
+      say: [{ x: 14, y: 36, w: 166, t: "My brain is random. I will write any word I like!", tx: 190, ty: 90, max: 24 }] },
+    { bg: LAB, cap: "2", deco: [`<path d="M110 120 h80 l-12 40 h-56 z" fill="#d9ddd4" stroke="#1b2230" stroke-width="3"/><path d="M122 132 h56 M126 144 h48" stroke="#1b2230" stroke-width="2" stroke-dasharray="4 4"/><text x="150" y="106" text-anchor="middle" font-family="JetBrains Mono" font-weight="700" font-size="20" fill="#b8352f">−∞</text>`],
+      cast: [{ who: "kokku", x: 10, y: 40, w: 96, h: 140 }],
+      say: [{ x: 110, y: 30, w: 180, t: "Words that break the meter fall through my sieve.", tx: 150, ty: 90, max: 24 }] },
+    { bg: LAB, cap: "3", cast: [{ who: "bit", x: 20, y: 60, w: 96, h: 114 }, { who: "mathi", x: 210, y: 100, w: 74, h: 74 }],
+      say: [{ x: 116, y: 26, w: 174, t: "Even with a random brain, every poem I finish is valid!", tx: 90, ty: 80, max: 24 }] },
+  ]);
+  comic("strip5", "Strip 5 · Kokku reads a chart", [
+    { bg: WARD, cap: "1", deco: [`<rect x="176" y="98" width="108" height="92" rx="6" fill="#fff" stroke="#1b2230" stroke-width="3"/><text x="186" y="124" font-family="JetBrains Mono" font-size="11" font-weight="700" fill="#1b2230">Denies SOB,</text><text x="186" y="142" font-family="JetBrains Mono" font-size="11" font-weight="700" fill="#b8352f">but</text><text x="186" y="160" font-family="JetBrains Mono" font-size="11" font-weight="700" fill="#1b2230">has HTN.</text>`],
+      cast: [{ who: "kokku", x: 14, y: 46, w: 98, h: 140 }],
+      say: [{ x: 112, y: 30, w: 176, t: "A new kind of poem: a patient note.", tx: 92, ty: 66 }] },
+    { bg: WARD, cap: "2", cast: [{ who: "ezhu", x: 30, y: 100, w: 84, h: 88, letter: "but", color: "#e98a7f" }],
+      say: [{ x: 110, y: 40, w: 178, t: "I am a wall. Denies stops at me, so HTN stays present.", tx: 100, ty: 110, max: 24 }] },
+    { bg: WARD, cap: "3", cast: [{ who: "bit", x: 190, y: 66, w: 94, h: 112 }],
+      say: [{ x: 14, y: 40, w: 172, t: "Then I may write I10, and nothing for SOB.", tx: 196, ty: 100, max: 24 }] },
+  ]);
+  comic("strip6", "Strip 6 · Proof, not vibes", [
+    { bg: NIGHT, deco: [stars(12, 9)], cap: "1", cast: [{ who: "mathi", x: 200, y: 30, w: 86, h: 86 }],
+      say: [{ x: 14, y: 40, w: 176, t: "How do you know your coder is any good?", tx: 210, ty: 70, max: 24 }] },
+    { bg: PAPER, cap: "2", cast: [{ who: "kokku", x: 180, y: 40, w: 100, h: 144 }],
+      say: [{ x: 12, y: 30, w: 170, t: "MCC counts every kind of mistake, even the ones accuracy hides.", tx: 186, ty: 70, max: 24 }] },
+    { bg: LAB, cap: "3", cast: [{ who: "bit", x: 20, y: 62, w: 94, h: 112 }, { who: "ezhu", x: 210, y: 100, w: 70, h: 80, letter: "✓", color: "#5cc27e" }],
+      say: [{ x: 110, y: 26, w: 180, t: "And the tests check that every output stays inside the rules.", tx: 90, ty: 78, max: 26 }] },
+  ]);
+}
+
+/* ───────────── 01 beats ───────────── */
+function examples(holder, words, input, fn) {
+  const h = $(holder); h.innerHTML = "";
+  words.forEach((w) => { const b = el("button", { class: "chipbtn", type: "button" }, esc(w)); b.onclick = () => { $(input).value = w; fn(); }; h.appendChild(b); });
+}
+function drawBeats() {
+  const w = $("#beatIn").value.trim(), gs = Y.graphemes(w), out = $("#beatOut");
+  out.innerHTML = ""; let total = 0;
+  gs.forEach((g) => {
+    const c = Y.letterClass(g); if (!c) return; const b = Y.BEATS[c]; total += b;
+    const color = c === "N" ? "var(--ner)" : c === "K" ? "var(--nirai)" : "var(--muted)";
+    out.appendChild(el("div", { class: "beat" }, `<div class="bar" style="width:${b * 46}px; --c:${color}"></div><div class="lt">${esc(g)}</div><div class="cl">${{ K: "kuril · 1", N: "nedil · 2", O: "otru · ½" }[c]}</div>`));
+  });
+  $("#beatSum").textContent = gs.length ? `total = ${total} mathirai` : "type a Tamil word";
+}
+
+/* ───────────── 02 asai ───────────── */
+function chips(units) { return units.map((u) => `<span class="chip ${u.kind === "1" ? "ner" : "nirai"}"><b>${esc(u.text)}</b><small>${u.kind === "1" ? "NER · 1" : "NIRAI · 0"}</small></span>`).join(""); }
+function drawAsai() {
+  const w = $("#asaiIn").value.trim(), u = Y.asaiUnits(w), code = u.map((x) => x.kind).join("");
+  $("#asaiOut").innerHTML = chips(u) || '<span class="mono">type a Tamil word</span>';
+  $("#asaiBin").innerHTML = [...code].map((b) => `<span class="b${b}">${b}</span>`).join("");
+  const [vp, cat] = Y.classify(code), fin = Y.eetrucheer(w);
+  $("#asaiSeer").innerHTML = vp ? `${vp} · ${cat} ${cat === "Kanicheer" ? '<span class="tag bad">not allowed in Venba</span>' : '<span class="tag ok">Venba foot</span>'}${fin ? ` · as a final foot: ${fin}` : ""}` : fin ? `final foot: ${fin}` : code ? `${code.length}-asai pattern` : "";
+}
+
+/* ───────────── 03 seer tree ───────────── */
+const SAMPLE_FOR = { "1": "நாள்", "0": "மலர்", "11": "வானில்", "01": "இனிய", "00": "இருளினை", "10": "கூடினால்", "111": "எண்ணற்ற", "011": "இசையோடு", "001": "வருமளவும்", "101": "கூவிளங்காய்", "110": "தேமாங்கனி", "010": "புளிமாங்கனி", "000": "கருவிளங்கனி", "100": "கூவிளங்கனி" };
+function drawTree() {
+  const W = 920, H = 342, levels = [[""], ["1", "0"], ["11", "10", "01", "00"], ["111", "110", "101", "100", "011", "010", "001", "000"]];
+  const pos = {}; levels.forEach((L, d) => L.forEach((k, i) => (pos[k] = [((i + 0.5) / L.length) * W, 30 + d * 86])));
+  let s = `<svg viewBox="0 0 ${W} ${H}" style="min-width:680px;width:100%" role="img" aria-label="Binary tree of asai patterns">`;
+  levels.slice(1).forEach((L) => L.forEach((k) => { const [x, y] = pos[k], [px, py] = pos[k.slice(0, -1)]; s += `<line x1="${px}" y1="${py + 12}" x2="${x}" y2="${y - 14}" stroke="var(--line)" stroke-width="2"/>`; }));
+  s += `<circle cx="${pos[""][0]}" cy="${pos[""][1]}" r="10" fill="var(--ink)"/>`;
+  levels.slice(1).forEach((L) => L.forEach((k) => {
+    const [x, y] = pos[k], last = k.slice(-1), col = last === "1" ? "var(--ner)" : "var(--nirai)";
+    const [vp, cat] = Y.classify(k), lab = k.length === 1 ? (k === "1" ? "Naal" : "Malar") : vp;
+    const bad = cat === "Kanicheer";
+    s += `<g class="leaf" data-k="${k}" style="cursor:pointer" tabindex="0" role="button" aria-label="${lab} ${k}"><rect x="${x - 52}" y="${y - 15}" width="104" height="44" rx="8" fill="var(--card)" stroke="${bad ? "var(--bad)" : col}" stroke-width="2" ${bad ? 'stroke-dasharray="5 4"' : ""}/>`;
+    s += `<text x="${x}" y="${y + 2}" text-anchor="middle" font-family="JetBrains Mono" font-weight="700" font-size="14" fill="${col}">${k}</text>`;
+    s += `<text x="${x}" y="${y + 20}" text-anchor="middle" font-family="Bricolage Grotesque" font-weight="600" font-size="11.5" fill="var(--ink)">${lab}${bad ? " ✗" : ""}</text></g>`;
+  }));
+  s += `<text x="8" y="${pos["1"][1] + 4}" font-family="Bricolage Grotesque" font-size="12" fill="var(--muted)">2¹</text><text x="8" y="${pos["11"][1] + 4}" font-family="Bricolage Grotesque" font-size="12" fill="var(--muted)">2²</text><text x="8" y="${pos["111"][1] + 4}" font-family="Bricolage Grotesque" font-size="12" fill="var(--muted)">2³</text></svg>`;
+  $("#tree").innerHTML = s;
+  const pick = (k) => { const w = SAMPLE_FOR[k]; $("#treeNote").innerHTML = `${k} → sample word <span class="ta">${w}</span> splits as <span class="ta">${Y.split(w)}</span> = ${Y.encode(w)}${Y.encode(w) === k ? " ✓" : ""}`; };
+  document.querySelectorAll("#tree .leaf").forEach((g) => { g.onclick = () => pick(g.dataset.k); g.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(g.dataset.k); } }; });
+  pick("10");
+}
+
+/* ───────────── shared 15-foot grid ───────────── */
+function footHtml(f, extra = "", rhymeIdx = null) {
+  const gs = Y.graphemes(f.word);
+  const word = rhymeIdx !== null && gs.length > 1 ? esc(gs[0]) + `<span class="r">${esc(gs[1])}</span>` + esc(gs.slice(2).join("")) : esc(f.word);
+  const role = f.index === 7 ? " · Thanichol" : f.index === 14 ? " · Eetrucheer" : "";
+  return `<div class="foot ${f.ok ? "" : "bad"} ${f.index === 7 ? "tn" : ""} ${extra}"><div class="w">${word}</div><div class="s">${esc(f.split)} · <span class="mono">${f.asai}</span></div><div class="m">${esc(f.vaipadu || "—")}${role}</div>${f.thalai ? `<div class="m" style="color:${Y.isVendalai(f.thalai) ? "var(--ok)" : "var(--bad)"}">← ${esc(f.thalai)}</div>` : ""}</div>`;
+}
+function gridHtml(rep, cur = -1) {
+  const rows = [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14]];
+  return rows.map((r, li) => `<div class="vline"><div class="lab">line ${li + 1}</div>${r.map((i) => rep.feet[i] ? footHtml(rep.feet[i], i === cur ? "cur" : "", [0, 4, 7, 8, 12].includes(i) ? 1 : null) : "").join("")}</div>`).join("");
+}
+
+/* ───────────── 04 thalai FSM ───────────── */
+let fsmI = 0, fsmTimer = null;
+function fsmSvg(state, edge) {
+  const N = { start: [90, 60, "Start", "any foot"], nirai: [70, 210, "Need Nirai", "after Maa"], ner: [300, 160, "Need Ner", "after Vilam / Kay"] };
+  let s = `<svg viewBox="0 0 440 280" style="width:100%;max-width:470px" role="img" aria-label="Thalai state machine">
+  <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker>
+  <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--accent)"/></marker></defs>`;
+  const E = { "start-nirai": "M80 92 Q 60 140 66 176", "start-ner": "M150 70 Q 250 80 286 126", "nirai-nirai": "M30 226 C -10 260 40 280 52 246", "nirai-ner": "M128 206 Q 210 196 252 176", "ner-nirai": "M262 186 Q 190 240 130 226", "ner-ner": "M340 186 C 390 220 380 120 344 136" };
+  const L = { "start-nirai": [30, 138, "Maa"], "start-ner": [214, 64, "Vilam / Kay"], "nirai-nirai": [8, 270, "Maa"], "nirai-ner": [176, 192, "Vilam / Kay"], "ner-nirai": [176, 246, "Maa"], "ner-ner": [354, 112, "Vilam / Kay"] };
+  for (const k in E) { const on = k === edge; s += `<path d="${E[k]}" fill="none" stroke="${on ? "var(--accent)" : "var(--muted)"}" stroke-width="${on ? 3.5 : 1.6}" marker-end="url(#${on ? "ah2" : "ah"})"/><text x="${L[k][0]}" y="${L[k][1]}" font-family="Bricolage Grotesque" font-size="11.5" font-weight="${on ? 700 : 500}" fill="${on ? "var(--accent)" : "var(--muted)"}">${L[k][2]}</text>`; }
+  for (const k in N) { const [x, y, t, sub] = N[k], on = k === state; s += `<g><rect x="${x - 56}" y="${y - 26}" width="112" height="50" rx="25" fill="${on ? "var(--accent)" : "var(--card)"}" stroke="${on ? "var(--accent)" : "var(--line)"}" stroke-width="2"/><text x="${x}" y="${y - 3}" text-anchor="middle" font-family="Bricolage Grotesque" font-weight="700" font-size="14" fill="${on ? "var(--card)" : "var(--ink)"}">${t}</text><text x="${x}" y="${y + 13}" text-anchor="middle" font-family="Bricolage Grotesque" font-size="10.5" fill="${on ? "var(--card)" : "var(--muted)"}">${sub}</text></g>`; }
+  return s + "</svg>";
+}
+function drawFsm() {
+  const rep = Y.validate(POEMS[+$("#fsmPoem").value]); fsmI = Math.max(0, Math.min(fsmI, rep.feet.length - 1));
+  const stateOf = (i) => { if (i < 0) return "start"; const c = Y.classify(rep.feet[i].asai)[1]; return c === "Maacheer" ? "nirai" : "ner"; };
+  const from = stateOf(fsmI - 1), to = stateOf(fsmI), cat = Y.classify(rep.feet[fsmI].asai)[1] || "Eetrucheer";
+  const lab = { Maacheer: "Maa", Vilacheer: "Vilam", Kaycheer: "Kay" }[cat] || "Vilam / Kay";
+  const edgeKey = from + "-" + (cat === "Maacheer" ? "nirai" : "ner");
+  $("#fsmSvg").innerHTML = fsmSvg(fsmI === 14 ? from : to, fsmI === 14 ? null : edgeKey);
+  const f = rep.feet[fsmI], need = fsmI === 0 ? "anything" : from === "nirai" ? "a foot starting with Nirai (0)" : "a foot starting with Ner (1)";
+  $("#fsmInfo").innerHTML = `<p><b>Foot ${fsmI + 1} of 15:</b> <span class="ta" style="font-size:20px;font-weight:700">${esc(f.word)}</span> = <span class="ta">${esc(f.split)}</span> = <code>${f.asai}</code></p>
+   <p>The machine was waiting for ${need}. ${fsmI === 0 ? "" : f.ok ? `<span class="tag ok">${esc(f.thalai)}</span>` : `<span class="tag bad">${esc(f.msg)}</span>`}</p>
+   <p>${fsmI === 14 ? `Final foot: <b>${esc(f.vaipadu || "invalid")}</b>.` : `It is a <b>${esc(f.vaipadu || "?")}</b> (${esc(lab)}), so next the machine needs <b>${cat === "Maacheer" ? "Nirai" : "Ner"}</b>.`}</p>`;
+  $("#fsmGrid").innerHTML = gridHtml(rep, fsmI);
+}
+
+/* ───────────── 05 validator ───────────── */
+function drawValidator() {
+  const rep = Y.validate($("#vIn").value);
+  $("#vVerdict").innerHTML = rep.valid ? `<span class="tag ok" style="font-size:14px">VALID</span> Nerisai Venba · ${rep.vikarpam}` : `<span class="tag bad" style="font-size:14px">INVALID</span> ${rep.feet.filter((f) => !f.ok).length} foot problem(s)`;
+  $("#vGrid").innerHTML = rep.feet.length ? gridHtml(rep) : "";
+  $("#vErr").innerHTML = [...rep.errors, ...rep.feet.filter((f) => !f.ok).map((f) => `foot ${f.index + 1} (${f.word}): ${f.msg}`)].map((e) => `<li>${esc(e)}</li>`).join("");
+}
+
+/* ───────────── 06 rhyme ───────────── */
+function drawRhyme() {
+  const a = $("#rA").value.trim(), b = $("#rB").value.trim();
+  const ea = Y.ethukai(a), eb = Y.ethukai(b), sa = Y.ethukai(a, true), sb = Y.ethukai(b, true), ma = Y.monai(a), mb = Y.monai(b);
+  const card = (t, x, y, ok, note) => `<div class="foot"><div class="m" style="font-size:13px">${t}</div><div class="mono" style="margin:4px 0">${esc(x ?? "—")} vs ${esc(y ?? "—")}</div><span class="tag ${ok ? "ok" : "bad"}">${ok ? "match" : "no match"}</span><div class="s" style="margin-top:4px">${note}</div></div>`;
+  $("#rOut").innerHTML = card("Ethukai (traditional)", ea, eb, ea && ea === eb, "first-letter length : consonant of 2nd letter") + card("Ethukai (strict)", sa, sb, sa && sa === sb, "exact 2nd letter") + card("Monai", ma, mb, ma && ma === mb, "first letter, Ina Ezhuthu groups");
+}
+
+/* ───────────── 07 decoder ───────────── */
+const LEX = DATA.lexicon, VENBA_CATS = ["Maacheer", "Vilacheer", "Kaycheer"];
+const passes = (e, k, exp, ka, kb) => {
+  if (k === 14) { if (!e.f) return "not a valid final foot"; } else if (!VENBA_CATS.includes(e.c)) return `${e.c || "unclassified"} foot`;
+  if (exp !== null && e.a[0] !== exp) return `breaks Vendalai: needs ${exp === "0" ? "Nirai" : "Ner"} first`;
+  if ((k === 4 || k === 7) && e.e !== ka) return "Ethukai must match line 1";
+  if (k === 12 && e.e !== kb) return "Ethukai must match line 3";
+  if ((k === 0 || k === 8) && !e.e) return "too short to rhyme";
+  return null;
+};
+const nextKeys = (k, e, ka, kb) => [Y.expectedNext(e.a), k === 0 ? e.e : ka, k === 8 ? e.e : kb];
+const viableMemo = new Map();
+function viable(k, exp, ka, kb) {
+  const key = [k, exp, ka, kb].join("|"); if (viableMemo.has(key)) return viableMemo.get(key);
+  let ok = false;
+  for (const e of LEX) { if (passes(e, k, exp, ka, kb) === null && (k === 14 || viable(k + 1, ...nextKeys(k, e, ka, kb)))) { ok = true; break; } }
+  viableMemo.set(key, ok); return ok;
+}
+let dWords = [];
+function dState() {
+  let k = 0, exp = null, ka = null, kb = null;
+  for (const w of dWords) { const e = LEX.find((x) => x.w === w); [exp, ka, kb] = nextKeys(k, e, ka, kb); k++; }
+  return { k, exp, ka, kb };
+}
+function dCands() {
+  const s = dState();
+  return LEX.map((e) => { let why = passes(e, s.k, s.exp, s.ka, s.kb); if (!why && s.k < 14 && !viable(s.k + 1, ...nextKeys(s.k, e, s.ka, s.kb))) why = "dead end: no way to finish"; return { e, why }; });
+}
+function drawDecoder() {
+  const done = dWords.length === 15, s = dState(), cs = done ? [] : dCands(), ok = cs.filter((c) => !c.why);
+  const role = s.k === 7 ? " (Thanichol)" : s.k === 14 ? " (final foot)" : "";
+  $("#dFoot").textContent = done ? "poem complete" : `foot ${s.k + 1} of 15${role} · needs ${s.exp === null ? "any start" : s.exp === "0" ? "Nirai first" : "Ner first"}`;
+  $("#dMeter").style.width = done ? "0%" : (100 * ok.length) / LEX.length + "%";
+  $("#dCount").textContent = done ? "" : `${ok.length} of ${LEX.length} words allowed · ${LEX.length - ok.length} masked to −∞`;
+  const box = $("#dCands"); box.innerHTML = "";
+  const show = $("#dShowMasked").checked;
+  cs.filter((c) => !c.why || show).sort((a, b) => (!!a.why) - (!!b.why)).forEach((c) => {
+    const b = el("button", { class: "cand " + (c.why ? "no" : "ok"), type: "button", role: "listitem", title: c.why || `${c.e.a} · ${c.e.c || "final"}` }, esc(c.e.w));
+    if (c.why) b.setAttribute("aria-disabled", "true"); else b.onclick = () => { dWords.push(c.e.w); drawDecoder(); };
+    box.appendChild(b);
+  });
+  const w = dWords, lines = [w.slice(0, 4), w.slice(4, 7), w.slice(8, 12), w.slice(12, 15)];
+  $("#dPoem").textContent = lines[0].join(" ") + "\n" + lines[1].join(" ") + (w.length > 7 ? " - " + w[7] : "") + "\n" + lines[2].join(" ") + "\n" + lines[3].join(" ") + (done ? "." : "");
+  if (done) { const r = Y.validate(dWords); $("#dVerdict").innerHTML = r.valid ? `<span class="tag ok">VALID</span> checked by the validator · ${r.vikarpam}` : `<span class="tag bad">INVALID</span>`; } else $("#dVerdict").innerHTML = "";
+}
+function dRandom() { const ok = dCands().filter((c) => !c.why); if (ok.length) { dWords.push(ok[Math.floor(Math.random() * ok.length)].e.w); drawDecoder(); } }
+
+/* ───────────── 08 bytes ───────────── */
+function drawTokens() {
+  $("#vocabN").textContent = DATA.vocab_size;
+  $("#tokOut").innerHTML = DATA.tokenization.map((t) => `<div style="margin-bottom:14px"><div class="ta" style="font:700 19px var(--f-ta)">${esc(t.text)}</div>
+    <div class="row" style="gap:6px;margin:6px 0">${t.tokens.map((k) => `<span class="foot" style="padding:4px 8px"><span class="ta" style="font-weight:700">${esc(k.text.replace(/ /g, "␣")) || "·"}</span><br><span class="mono" style="font-size:11px;color:var(--muted)">#${k.id} · ${k.hex}</span></span>`).join("")}</div>
+    <div class="mono" style="font-size:12px;color:var(--muted)">UTF-8: ${t.utf8}</div></div>`).join("") + `<p class="prose" style="font-size:15px;margin:0">Notice the lone pulli <span class="ta">்</span> and the vowel signs arriving as separate tokens. The processor only judges the text once the bytes form a word in its trie.</p>`;
+}
+
+/* ───────────── 09 clinic ───────────── */
+let cSetting = "outpatient";
+function highlight(text, tr) {
+  const spans = [];
+  tr.triggers.forEach((t) => spans.push([t.c0, t.c1, `<mark class="tr ${t.state}" title="${t.state}">`, "</mark>"]));
+  tr.entities.forEach((e) => spans.push([e.c0, e.c1, `<mark class="ent" title="${esc(e.entity)} · ${e.match}">`, "</mark>"]));
+  tr.lats.forEach((l) => spans.push([l.c0, l.c1, `<mark class="lat" title="${l.label}">`, "</mark>"]));
+  spans.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+  let out = "", pos = 0, open = [];
+  const events = []; spans.forEach((s) => { events.push([s[0], 1, s]); events.push([s[1], 0, s]); });
+  events.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  for (const [p, isOpen, s] of events) { out += esc(text.slice(pos, p)); pos = p; out += isOpen ? s[2] : s[3]; }
+  return out + esc(text.slice(pos));
+}
+function drawClinic() {
+  const t = DATA.traces[+$("#cNote").value];
+  const statusTag = (s) => `<span class="tag ${s === "CODE" ? "ok" : s === "DO_NOT_CODE" ? "bad" : "mute"}">${s}</span>`;
+  const findings = t.findings[cSetting];
+  let html = `<div class="stage"><div class="num">1</div><div><b>Raw note</b><div class="note-raw">${esc(t.note)}</div></div></div>`;
+  html += `<div class="stage"><div class="num">2</div><div><b>Abbreviations expanded</b> <span class="mono" style="color:var(--muted)">(CAP, OD, OS, MI are case-sensitive)</span><div class="note-raw">${esc(t.expanded)}</div></div></div>`;
+  html += `<div class="stage"><div class="num">3</div><div><b>Clauses split at walls</b> <span class="mono" style="color:var(--muted)">. ; but however except although</span>${t.clauses.map((c, i) => (i ? '<div class="wall">▬ WALL ▬</div>' : "") + `<div class="clause">${esc(c.text)}</div>`).join("")}</div></div>`;
+  html += `<div class="stage"><div class="num">4</div><div><b>Triggers, entities and laterality</b> <span class="mono" style="color:var(--muted)">nearest preceding trigger within 6 tokens</span>${t.clauses.map((c) => `<div class="clause">${highlight(c.text.toLowerCase(), c)}</div>`).join("")}</div></div>`;
+  html += `<div class="stage"><div class="num">5</div><div><b>ICD-10-CM codes · ${cSetting}</b><div style="overflow-x:auto"><table class="t"><thead><tr><th>mention</th><th>entity</th><th>match</th><th>assertion</th><th>side</th><th>codes</th><th>status</th></tr></thead><tbody>${findings.map((f) => `<tr><td>${esc(f.raw_mention)}</td><td>${esc(f.entity)}</td><td class="mono">${f.match_type}${f.match_type !== "EXACT" ? " " + f.confidence : ""}</td><td>${f.assertion}</td><td>${f.laterality}${f.laterality_distance !== null ? ` <span class="mono" style="color:var(--muted)">(${f.laterality_distance} tok)</span>` : ""}</td><td class="mono"><b>${f.codes.join(", ") || "—"}</b></td><td>${statusTag(f.status)}</td></tr>`).join("")}</tbody></table></div>
+    <p class="mono" style="margin:8px 0 0">allowed codes → ${esc([...new Set(findings.flatMap((f) => f.codes))].join(", ") || "(none)")}</p></div></div>`;
+  $("#cTrace").innerHTML = html;
+  drawKeys(true);
+}
+
+/* ───────────── 10 icd trie typing ───────────── */
+let kTyped = "", kTimer = null;
+function kAllowed() { const t = DATA.traces[+$("#cNote").value]; return [...new Set(t.findings[cSetting].flatMap((f) => f.codes))]; }
+function kState() { const parts = kTyped.split(";"); return { done: new Set(parts.slice(0, -1).map((s) => s.trim())), partial: parts[parts.length - 1].trim() }; }
+function kLive(codes, partial, done) { return codes.some((c) => c.startsWith(partial) && !done.has(c)); }
+function kNext() {
+  const codes = kAllowed(), { done, partial } = kState(), keys = new Set();
+  if (kTyped.endsWith("<EOS>")) return keys;
+  for (const c of codes) if (!done.has(c) && c.startsWith(partial) && c.length > partial.length) keys.add(c[partial.length]);
+  if (codes.includes(partial) && !done.has(partial)) { if (kLive(codes, "", new Set([...done, partial]))) keys.add(";"); keys.add("EOS"); }
+  return keys;
+}
+function drawKeys(reset) {
+  if (reset) { kTyped = ""; clearInterval(kTimer); }
+  const codes = kAllowed(), next = kNext();
+  $("#kAllowed").textContent = `allowed set for the selected note (${cSetting}): ${codes.join(", ") || "none"}`;
+  $("#kTyped").textContent = "CODES: " + kTyped;
+  const alphabet = [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789."].concat([";", "EOS"]);
+  const box = $("#kKeys"); box.innerHTML = "";
+  alphabet.forEach((ch) => { const on = next.has(ch); const b = el("button", { class: "key " + (on ? "on" : "off"), type: "button", "aria-label": ch, style: ch === "EOS" ? "width:54px;font-size:12px" : "" }, ch); if (on) b.onclick = () => kPress(ch); else b.disabled = true; box.appendChild(b); });
+  $("#kStatus").innerHTML = kTyped.endsWith("<EOS>") ? `<span class="tag ok">finished</span> every code came from the allowed set` : `${next.size} of ${alphabet.length} keys allowed`;
+}
+function kPress(ch) { kTyped += ch === "EOS" ? " <EOS>" : ch === ";" ? "; " : ch; drawKeys(false); }
+function kAuto() {
+  drawKeys(true);
+  kTimer = setInterval(() => { const n = [...kNext()]; if (!n.length) { clearInterval(kTimer); return; } const pref = n.filter((c) => c !== "EOS"); const pick = pref.length && Math.random() < 0.8 ? pref[Math.floor(Math.random() * pref.length)] : n[Math.floor(Math.random() * n.length)]; kPress(pick); }, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 220);
+}
+
+/* ───────────── 11 MCC ───────────── */
+function mccBinary(tp, tn, fp, fn) { const d = Math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn)); return d ? (tp * tn - fp * fn) / d : 0; }
+function drawCM() {
+  const c = DATA.confusion, max = Math.max(...c.matrix.flat()), short = { PRESENT: "PRES", NEGATED: "NEG", UNCERTAIN: "UNC", HISTORICAL: "HIST", FAMILY_HISTORY: "FAM", MISSED: "MISS", NONE: "NONE" };
+  let s = `<table class="cm"><tr><th></th>${c.labels.map((l) => `<th>${short[l]}</th>`).join("")}</tr>`;
+  c.matrix.forEach((row, i) => { s += `<tr><th>${short[c.labels[i]]}</th>` + row.map((v, j) => { const a = v / max; const col = i === j ? "var(--ok)" : "var(--bad)"; return `<td style="background:color-mix(in srgb, ${col} ${Math.round(a * 70)}%, transparent);font-weight:${v ? 700 : 400}">${v}</td>`; }).join("") + "</tr>"; });
+  $("#cmOut").innerHTML = s + "</table>";
+  const m = c.summary;
+  $("#cmStats").innerHTML = `<div class="two"><div class="stat">${m.assertion_mcc.toFixed(3)}<small>assertion MCC</small></div><div class="stat">${m.laterality_mcc.toFixed(3)}<small>laterality MCC</small></div><div class="stat">${m.codable_mcc.toFixed(3)}<small>codable MCC</small></div><div class="stat">${m.n_pairs}<small>gold/pred pairs</small></div></div>
+  <p style="font:14px var(--f-display);color:var(--muted)">Known error kept on purpose: ${c.errors.map((e) => `“${esc(e.note)}” → gold ${e.gold ? e.gold[1] : "—"}, predicted ${e.pred ? e.pred[1] : "—"}`).join("; ")}</p>`;
+}
+const M = { TP: 5, FN: 5, FP: 5, TN: 985 };
+function drawMcc() {
+  const box = $("#mSl"); if (!box.children.length) {
+    for (const k of ["TP", "FN", "FP", "TN"]) { const lab = el("label", { for: "m" + k }, `${k} <span class="mono" id="mv${k}">${M[k]}</span>`); const r = el("input", { type: "range", id: "m" + k, min: "0", max: k === "TN" ? "2000" : "200", value: M[k] }); r.oninput = () => { M[k] = +r.value; drawMcc(); }; lab.appendChild(r); box.appendChild(lab); }
+  }
+  for (const k in M) $("#mv" + k).textContent = M[k];
+  const n = M.TP + M.TN + M.FP + M.FN, acc = n ? (M.TP + M.TN) / n : 0, m = mccBinary(M.TP, M.TN, M.FP, M.FN);
+  $("#mAcc").innerHTML = `${(acc * 100).toFixed(1)}%<small>accuracy</small>`;
+  $("#mMcc").innerHTML = `<span style="color:${m > 0.7 ? "var(--ok)" : m > 0.3 ? "var(--ner)" : "var(--bad)"}">${m.toFixed(3)}</span><small>MCC</small>`;
+}
+
+/* ───────────── wiring ───────────── */
+function init() {
+  drawComics();
+  examples("#beatEx", ["கா", "கல்", "கூடினால்", "கொக்கு"], "#beatIn", drawBeats); $("#beatIn").oninput = drawBeats; drawBeats();
+  examples("#asaiEx", ["கூடினால்", "தவழ்ந்திட", "இசையோடு", "கூவிளங்கனி"], "#asaiIn", drawAsai); $("#asaiIn").oninput = drawAsai; drawAsai();
+  drawTree();
+  $("#fsmPoem").onchange = () => { fsmI = 0; drawFsm(); };
+  $("#fsmNext").onclick = () => { fsmI = Math.min(14, fsmI + 1); drawFsm(); };
+  $("#fsmPrev").onclick = () => { fsmI = Math.max(0, fsmI - 1); drawFsm(); };
+  $("#fsmPlay").onclick = () => { if (fsmTimer) { clearInterval(fsmTimer); fsmTimer = null; $("#fsmPlay").textContent = "Play"; return; } fsmI = 0; drawFsm(); $("#fsmPlay").textContent = "Pause"; fsmTimer = setInterval(() => { if (fsmI >= 14) { clearInterval(fsmTimer); fsmTimer = null; $("#fsmPlay").textContent = "Play"; return; } fsmI++; drawFsm(); }, 900); };
+  drawFsm();
+  POEMS.forEach((p, i) => { const b = el("button", { type: "button" }, POEM_NAMES[i]); b.onclick = () => { $("#vIn").value = p; drawValidator(); }; $("#vPresets").appendChild(b); });
+  $("#vIn").value = POEMS[2]; $("#vIn").oninput = drawValidator; drawValidator();
+  $("#rA").oninput = drawRhyme; $("#rB").oninput = drawRhyme; drawRhyme();
+  $("#dPick").onclick = dRandom; $("#dAuto").onclick = () => { while (dWords.length < 15) { const ok = dCands().filter((c) => !c.why); if (!ok.length) break; dWords.push(ok[Math.floor(Math.random() * ok.length)].e.w); } drawDecoder(); };
+  $("#dUndo").onclick = () => { dWords.pop(); drawDecoder(); }; $("#dReset").onclick = () => { dWords = []; drawDecoder(); }; $("#dShowMasked").onchange = drawDecoder;
+  dWords = ["வண்ண", "நிலவொளி", "வானில்"]; drawDecoder();
+  drawTokens();
+  DATA.traces.forEach((t, i) => $("#cNote").appendChild(el("option", { value: i }, esc(t.note))));
+  $("#cNote").onchange = drawClinic;
+  const setSet = (s) => { cSetting = s; $("#cOut").setAttribute("aria-pressed", s === "outpatient"); $("#cIn").setAttribute("aria-pressed", s === "inpatient"); drawClinic(); };
+  $("#cOut").onclick = () => setSet("outpatient"); $("#cIn").onclick = () => setSet("inpatient");
+  drawClinic();
+  $("#kAuto").onclick = kAuto; $("#kReset").onclick = () => drawKeys(true);
+  drawCM(); drawMcc();
+  document.querySelectorAll("[data-copy]").forEach((b) => (b.onclick = async () => { try { await navigator.clipboard.writeText($("#" + b.dataset.copy).textContent); b.textContent = "Copied"; } catch { b.textContent = "Select and copy"; } setTimeout(() => (b.textContent = "Copy"), 1600); }));
+  const links = [...document.querySelectorAll("#toc a")];
+  const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) links.forEach((a) => a.classList.toggle("on", a.getAttribute("href") === "#" + e.target.id)); }), { rootMargin: "-40% 0px -55% 0px" });
+  document.querySelectorAll("section.ch").forEach((s) => io.observe(s));
+}
+init();
+</script>
+</body>
+</html>

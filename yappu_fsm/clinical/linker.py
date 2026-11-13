@@ -12,7 +12,15 @@ Pipeline for each note:
 5. bind laterality (RIGHT / LEFT / BILATERAL) by closest-token distance;
 6. look the (assertion, laterality) key up in the lexicon to get code(s).
 
-This is decision support only. Output must be reviewed by a qualified coder.
+Coding setting follows the ICD-10-CM Official Guidelines for Coding and Reporting:
+
+* ``setting="outpatient"`` (default, Section IV.H): uncertain diagnoses ("probable",
+  "suspected", "rule out", ...) are NOT coded; code the documented signs/symptoms instead.
+* ``setting="inpatient"`` (Section II.H / III.C): an uncertain diagnosis documented at
+  discharge is coded as if it existed or was established.
+
+Negated findings are never coded. This is decision support only: output must be
+reviewed by a qualified coder.
 """
 
 from __future__ import annotations
@@ -28,7 +36,7 @@ from .phonetic import clinical_phonetic_key, phonetic_word, similarity
 CodeValue = Union[str, List[str]]
 Lexicon = Dict[str, Dict[str, CodeValue]]
 
-NON_CODABLE = ("NEGATED", "UNCERTAIN")
+SETTINGS = ("outpatient", "inpatient")
 
 
 @dataclass
@@ -61,6 +69,14 @@ class ClinicalLinker:
         (r"\bsob\b", "shortness of breath", False),
         (r"\bnpdr\b", "nonproliferative diabetic retinopathy", False),
         (r"\bb/l\b", "bilateral", False),
+        (r"\ba-?fib\b", "atrial fibrillation", False),
+        (r"\bchf\b", "heart failure", False),
+        (r"\bckd\b", "chronic kidney disease", False),
+        (r"\buti\b", "urinary tract infection", False),
+        (r"\bhld\b", "hyperlipidemia", False),
+        (r"\bcva\b", "stroke", False),
+        (r"\bcts\b", "carpal tunnel syndrome", False),
+        (r"\bt1dm\b", "type 1 diabetes", False),
         (r"\brt\b", "right", False),
         (r"\blt\b", "left", False),
         (r"\bMI\b", "myocardial infarction", True),
@@ -100,7 +116,11 @@ class ClinicalLinker:
 
     def __init__(self, lexicon: Lexicon, max_laterality_distance: int = 4,
                  fuzzy_threshold: float = 0.84, min_fuzzy_word_len: int = 5,
-                 post_window_chars: int = 30, max_scope_tokens: int = 6):
+                 post_window_chars: int = 30, max_scope_tokens: int = 6,
+                 setting: str = "outpatient"):
+        if setting not in SETTINGS:
+            raise ValueError(f"setting must be one of {SETTINGS}")
+        self.setting = setting
         self.lexicon = {k.lower(): v for k, v in lexicon.items()}
         self.max_lat = max_laterality_distance
         self.fuzzy_threshold = fuzzy_threshold
@@ -242,10 +262,13 @@ class ClinicalLinker:
                 assertion = self._assertion(cl, triggers, ent["c0"], ent["c1"])
                 lat, dist = self._bind_laterality(ent["t0"], ent["t1"], lats)
                 cmap = ent["entry"]["code_map"]
-                if assertion in NON_CODABLE:
+                lookup = assertion
+                if assertion == "UNCERTAIN" and self.setting == "inpatient":
+                    lookup = "PRESENT"   # CM Section II.H: code as if established
+                if lookup in ("NEGATED", "UNCERTAIN"):
                     codes, status = [], "DO_NOT_CODE"
                 else:
-                    val = cmap.get(f"{assertion}_{lat}") or cmap.get(f"{assertion}_UNSPECIFIED") or cmap.get(assertion)
+                    val = cmap.get(f"{lookup}_{lat}") or cmap.get(f"{lookup}_UNSPECIFIED") or cmap.get(lookup)
                     codes = [] if val is None else ([val] if isinstance(val, str) else list(val))
                     status = "CODE" if codes else "REVIEW_SPECIFICITY"
                 findings.append(Finding(ent["raw"], ent["entry"]["canonical"], ent["match_type"], ent["score"],

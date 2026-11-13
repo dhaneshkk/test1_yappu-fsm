@@ -26,14 +26,14 @@ def cmd_validate(a):
     return 0 if rep.valid else 1
 
 
-def _linker(path):
+def _linker(path, setting="outpatient"):
     from .clinical import ClinicalLinker, load_lexicon
-    return ClinicalLinker(load_lexicon(path or data_path("icd10cm_example_lexicon.json")))
+    return ClinicalLinker(load_lexicon(path or data_path("icd10cm_example_lexicon.json")), setting=setting)
 
 
 def cmd_code(a):
     text = sys.stdin.read() if a.note in (None, "-") else a.note
-    L = _linker(a.lexicon)
+    L = _linker(a.lexicon, a.setting)
     findings = L.process(text)
     if a.json:
         print(json.dumps([f.to_dict() for f in findings], ensure_ascii=False, indent=2))
@@ -83,6 +83,8 @@ def main(argv=None):
     s.add_argument("note", nargs="?")
     s.add_argument("--lexicon")
     s.add_argument("--json", action="store_true")
+    s.add_argument("--setting", choices=["outpatient", "inpatient"], default="outpatient",
+                   help="ICD-10-CM guideline for uncertain diagnoses (default: outpatient)")
     s.set_defaults(fn=cmd_code)
     s = sub.add_parser("eval", help="MCC evaluation on a gold JSONL file")
     s.add_argument("--gold")

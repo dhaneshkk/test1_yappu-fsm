@@ -6,6 +6,8 @@
 Models:
   * ``yappu-icd-linker``       – runs the clinical linker on the last user message;
                                   the assistant content is a JSON list of findings.
+                                  Optional body field ``"setting": "inpatient"`` applies the
+                                  ICD-10-CM inpatient rule for uncertain diagnoses.
   * ``yappu-venba-validator``  – validates the last user message as a Nerisai Venba;
                                   the assistant content is the text report.
 
@@ -48,6 +50,9 @@ def complete(body: dict, linker: ClinicalLinker) -> dict:
         raise ValueError(f"unknown model '{model}'; available: {', '.join(MODELS)}")
     text = _last_user_text(body.get("messages"))
     if model == "yappu-icd-linker":
+        setting = body.get("setting", "outpatient")   # extra field: "outpatient" | "inpatient"
+        if setting != linker.setting:
+            linker = ClinicalLinker(linker.lexicon, setting=setting)
         found = linker.process(text)
         content = json.dumps({"findings": [f.to_dict() for f in found],
                               "allowed_codes": ClinicalLinker.allowed_codes(found)}, ensure_ascii=False)

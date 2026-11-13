@@ -125,3 +125,42 @@ def test_short_word_guardrail(linker):
 def test_allowed_codes_dedup(linker):
     f = linker.process("HTN. Also hypertension noted.")
     assert linker.allowed_codes(f) == ["I10"]
+
+
+# ---- ICD-10-CM coding settings and expanded lexicon ---------------------------
+
+def test_outpatient_vs_inpatient_uncertain(lexicon):
+    from yappu_fsm.clinical import ClinicalLinker
+    note = "Probable pneumonia, start antibiotics."
+    (out,) = ClinicalLinker(lexicon).process(note)
+    (inp,) = ClinicalLinker(lexicon, setting="inpatient").process(note)
+    assert out.status == "DO_NOT_CODE"                      # CM Section IV.H
+    assert inp.codes == ["J18.9"] and inp.assertion == "UNCERTAIN"   # CM Section II.H
+
+
+def test_inpatient_still_blocks_negation(lexicon):
+    from yappu_fsm.clinical import ClinicalLinker
+    (f,) = ClinicalLinker(lexicon, setting="inpatient").process("Denies fever.")
+    assert f.status == "DO_NOT_CODE"
+
+
+def test_invalid_setting(lexicon):
+    from yappu_fsm.clinical import ClinicalLinker
+    with pytest.raises(ValueError):
+        ClinicalLinker(lexicon, setting="er")
+
+
+@pytest.mark.parametrize("note,entity,codes", [
+    ("Hx of AFib, on apixaban.", "atrial fibrillation", ["I48.91"]),
+    ("CHF exacerbation.", "heart failure", ["I50.9"]),
+    ("History of CVA in 2020.", "stroke", ["Z86.73"]),
+    ("Father had colon cancer.", "colon cancer", ["Z80.0"]),
+    ("Rt CTS confirmed on EMG.", "carpal tunnel syndrome", ["G56.01"]),
+    ("Bilateral carpal tunnel syndrome.", "carpal tunnel syndrome", ["G56.03"]),
+    ("Left shoulder pain after fall.", "shoulder pain", ["M25.512"]),
+    ("Former smoker, history of nicotine dependence.", "nicotine dependence", ["Z87.891"]),
+    ("UTI, treated with nitrofurantoin.", "urinary tract infection", ["N39.0"]),
+])
+def test_expanded_cm_lexicon(linker, note, entity, codes):
+    f = by_entity(linker.process(note))[entity]
+    assert f.codes == codes

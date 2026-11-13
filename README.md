@@ -21,11 +21,12 @@ constrained decoding → clinical ICD-10 coding" exploration into one tested pac
 ```bash
 pip install -e ".[dev]"          # core: pure Python, no dependencies
 pip install -e ".[hf,dev]"       # + torch / transformers for constrained decoding
-pytest -q                        # 82 tests; HF tests auto-skip without torch
+pytest -q                        # 95 tests; HF tests auto-skip without torch
 ```
 
-Colab: `notebooks/yappu_fsm_colab.ipynb` is a single cell that installs the repo, runs the
-tests and every demo.
+Colab: `notebooks/yappu_fsm_colab_single_cell.ipynb` is one self-contained cell. It embeds the
+whole package, so nothing needs uploading; run it to get the tests and every demo.
+`docs/tutorial.html` is a progressive, interactive tutorial with comics.
 
 ## Prosody
 
@@ -136,14 +137,29 @@ regression testing, not a clinical validation. Missed and spurious entities coun
 own classes, so recall errors lower the MCC. The remaining error ("chest pain is unlikely
 to be cardiac" → UNCERTAIN) is kept as a known limitation of rule-based scope.
 
-### ICD-10-CM vs ICD-10-AM
+### ICD-10-CM (US) coding rules
 
-`data/icd10cm_example_lexicon.json` is an illustrative **ICD-10-CM (US)** subset. ICD-10-AM
-codes and the Australian Coding Standards differ, including how uncertain diagnoses are
-handled for admitted patients. For AM work, supply your own lexicon in the same JSON format
-(`{"entity": {"ASSERTION_LATERALITY": code | [codes]}}`) and adjust `NON_CODABLE` in
-`clinical/linker.py` to your coding rules. All output is decision support for a
-qualified coder.
+The linker targets **ICD-10-CM** and follows the *ICD-10-CM Official Guidelines for Coding
+and Reporting* for uncertain diagnoses:
+
+| Setting | Guideline | "Probable / suspected / rule out X" |
+|---|---|---|
+| `outpatient` (default) | Section IV.H | not coded (`DO_NOT_CODE`); code documented signs and symptoms instead |
+| `inpatient` | Section II.H / III.C | coded as if established (assertion stays `UNCERTAIN` for audit) |
+
+Negated findings are never coded. History maps to Z86/Z87 personal-history codes and family
+history to Z80–Z84 where the lexicon provides them.
+
+```bash
+yappu code "Probable pneumonia, start antibiotics."                      # DO_NOT_CODE
+yappu code "Probable pneumonia, start antibiotics." --setting inpatient  # J18.9
+```
+
+`data/icd10cm_example_lexicon.json` holds 32 common conditions (diabetes, hypertension, AF,
+heart failure, CKD, COPD, asthma, pneumonia, OA, joint pain with laterality, carpal tunnel,
+history and family-history codes, and more). It is a demo subset. Extend it in the same
+format (`{"entity": {"ASSERTION_LATERALITY": code | [codes]}}`) and verify codes against the
+current CMS release. All output is decision support for a certified coder.
 
 ## OpenAI-compatible endpoint
 
@@ -159,7 +175,8 @@ r = c.chat.completions.create(model="yappu-icd-linker",
 print(r.choices[0].message.content)    # JSON: findings + allowed_codes
 ```
 
-Models: `yappu-icd-linker` and `yappu-venba-validator`. Streaming is not supported.
+Models: `yappu-icd-linker` and `yappu-venba-validator`. Pass `"setting": "inpatient"` in the
+request body (`extra_body` in the OpenAI SDK) for the inpatient rule. Streaming is not supported.
 
 ## Corrections relative to the original thread
 
