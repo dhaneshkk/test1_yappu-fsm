@@ -22,7 +22,7 @@ constrained decoding → clinical ICD-10 coding" exploration into one tested pac
 ```bash
 pip install -e ".[dev]"          # core: pure Python, no dependencies
 pip install -e ".[hf,dev]"       # + torch / transformers for constrained decoding
-pytest -q                        # 121 tests; HF tests auto-skip without torch
+pytest -q                        # 142 tests; HF tests auto-skip without torch
 ```
 
 Colab: `notebooks/yappu_fsm_colab_single_cell.ipynb` is one self-contained cell. It embeds the
@@ -111,10 +111,15 @@ pneumonia            -> pneumonia                                  EXACT        
 allowed codes: M17.12, E11.3291, I10
 ```
 
-* **Assertion:** each entity takes the *nearest preceding* trigger within 6 tokens in its
-  clause, or a post-trigger right after it (`ruled out`, `resolved`, `unlikely`).
-  Pseudo-triggers such as "no change" and "gram negative" are ignored. Clause walls (`.`, `;`,
-  `but`, `however`, …) stop scope from leaking; decimals like `7.5` do not split a clause.
+* **Assertion (NegEx + ConText):**
+  * Pre-triggers ("denies", "no", "without", "ruled out", "absence of", "no history of", …)
+    scan forward, and post-triggers ("was ruled out", "not demonstrated", "never developed",
+    "absent", "cannot be ruled out", "unlikely", "resolved") scan backward. Both reach at most 6
+    tokens and stop at CONJ terminators ("aside from", "secondary to", "due to", "except", …).
+  * Pseudo-triggers ("no change", "gram negative", "not ruled out") cannot open a negation.
+  * ConText adds HISTORICAL, FAMILY_HISTORY and HYPOTHETICAL ("return if", "if the patient
+    develops", "watch for").
+  * Clause walls (`.`, `;`, `but`, `however`, …) split the note first; decimals like `7.5` do not.
 * **Laterality:** closest-token binding within 4 tokens, with each modifier used once.
   Bilateral hip pain maps to both side codes, because no single bilateral code exists.
 * **Fuzzy matching:** compared word by word. A word matches exactly, or, if it is at least 5
@@ -132,6 +137,18 @@ assertion_mcc        0.9558
 laterality_mcc       1.0
 codable_mcc          0.9269
 ```
+
+NegEx alignment, measured on `data/gold_negex_heldout.jsonl` (12 notes written after the
+rules were tuned on `gold_negex.jsonl`, scored once before any further change):
+
+| | assertion MCC | codable MCC |
+|---|---|---|
+| previous linker | 0.619 | 0.539 |
+| NegEx/ConText linker | 0.861 | 0.811 |
+
+The two misses that run exposed ("cannot be ruled out" after the term; "which" wrongly used
+as a terminator) were then fixed, so that set is now a regression test, not a held-out one.
+The next honest measurement needs real notes.
 
 `data/gold_assertions.jsonl` is a **small synthetic smoke-test set** of 20 notes written for
 regression testing, not a clinical validation. Missed and spurious entities count as their

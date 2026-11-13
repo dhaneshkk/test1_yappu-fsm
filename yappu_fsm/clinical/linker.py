@@ -93,25 +93,40 @@ class ClinicalLinker:
         "LEFT": [r"\bleft eye\b", r"\bleft-sided\b", r"\bleft\b"],
     }
 
+    # Trigger lists follow NegEx (Chapman et al. 2001) and its ConText extension
+    # (Harkema et al. 2009): pre-triggers scan forward, post-triggers scan backward, both
+    # over at most ``max_scope_tokens`` tokens and never across a CONJ terminator.
     PRE_TRIGGERS: Dict[str, List[str]] = {
         "NEGATED": [r"\bdenies\b", r"\bdenied\b", r"\bno evidence of\b", r"\bnegative for\b",
-                    r"\bwithout\b", r"\bno\b", r"\bfree of\b"],
+                    r"\bwithout\b", r"\bno\b", r"\bfree of\b", r"\bruled out\b", r"\brules out\b",
+                    r"\babsence of\b", r"\bno signs? of\b", r"\bno history of\b", r"\bnot\b",
+                    r"\bnever had\b", r"\bnone\b"],
         "UNCERTAIN": [r"\brule out\b", r"\br/o\b", r"\bpossible\b", r"\bsuspected\b",
-                      r"\bprobable\b", r"\bquestionable\b", r"\bconcern for\b"],
+                      r"\bprobable\b", r"\bquestionable\b", r"\bconcern for\b",
+                      r"\bnot (?:been )?ruled out\b", r"\bcannot be ruled out\b", r"\bnot rule out\b"],
         "HISTORICAL": [r"\bhistory of\b", r"\bh/o\b", r"\bpmh\b", r"\bstatus post\b", r"\bs/p\b",
                        r"\bprevious\b", r"\bprior\b"],
         "FAMILY_HISTORY": [r"\bfamily history of\b", r"\bfhx\b", r"\bmother had\b", r"\bfather had\b",
                            r"\bmother has\b", r"\bfather has\b", r"\bsister had\b", r"\bbrother had\b"],
+        "HYPOTHETICAL": [r"\bif (?:the patient |he |she |you |they )?develops?\b", r"\breturn if\b",
+                         r"\bcall if\b", r"\bshould (?:the patient |he |she |you |they )?develop\b",
+                         r"\bin case of\b", r"\bwatch for\b"],
     }
     POST_TRIGGERS: Dict[str, List[str]] = {
-        "NEGATED": [r"^\W*(?:was |is |has been )?ruled out\b", r"^\W*(?:is )?not present\b"],
-        "HISTORICAL": [r"^\W*(?:has |is |was )?resolved\b"],
-        "UNCERTAIN": [r"^\W*(?:is )?(?:suspected|unlikely|possible)\b"],
+        "NEGATED": [r"\b(?:was |is |has been |were )?ruled out\b", r"\b(?:is |was )?not present\b",
+                    r"\bnot demonstrated\b", r"\bnot seen\b", r"\bnever developed\b", r"\babsent\b"],
+        "HISTORICAL": [r"\b(?:has |is |was )?resolved\b"],
+        "UNCERTAIN": [r"\b(?:is |was )?(?:suspected|unlikely|possible|questionable)\b",
+                      r"\bcannot be (?:ruled out|excluded)\b", r"\bnot (?:been )?ruled out\b"],
     }
+    # Pseudo-triggers stop a NEGATED trigger from opening a scope (NegEx [PSEU]).
     PSEUDO_TRIGGERS = [r"\bno change\b", r"\bno increase\b", r"\bnot only\b", r"\bgram negative\b",
-                       r"\bwithout difficulty\b", r"\bnot ruled out\b"]
-    # "family history of" must win over "history of": checked by longest-match below.
-
+                       r"\bwithout difficulty\b", r"\bnot (?:been )?ruled out\b", r"\bnot rule out\b",
+                       r"\bcannot be ruled out\b", r"\bno further\b", r"\bnot certain whether\b"]
+    # CONJ terminators end a scope inside a clause (NegEx [CONJ]).
+    CONJ = [r"\baside from\b", r"\bapart from\b", r"\bsecondary to\b", r"\bcause of\b", r"\bsource of\b",
+            r"\bdue to\b", r"\bexcept\b"]
+    # Clause walls (also CONJ terminators) split the note before any matching.
     WALLS = [r"\bbut\b", r"\bhowever\b", r"\bexcept\b", r"\balthough\b", r"\bwhereas\b",
              r"\.(?!\d)", r";", r"\n"]
 
@@ -235,7 +250,7 @@ class ClinicalLinker:
         for state, pats in self.PRE_TRIGGERS.items():
             for p in pats:
                 for m in re.finditer(p, clause_l):
-                    if any(a <= m.start() < b for a, b in pseudo):
+                    if state == "NEGATED" and any(a <= m.start() < b for a, b in pseudo):
                         continue
                     hits.append((m.start(), m.end(), state))
         # keep the longest of overlapping triggers ("family history of" beats "history of")
@@ -245,17 +260,37 @@ class ClinicalLinker:
                 kept.append(h)
         return sorted(kept)
 
+    def _ntok(self, text: str) -> int:
+        return len(re.findall(r"[\w/'-]+", text))
+
+    def _conj_between(self, clause_l: str, a: int, b: int) -> bool:
+        seg = clause_l[a:b]
+        return any(re.search(p, seg) for p in self.CONJ)
+
+    def _post_hits(self, clause_l: str) -> List[Tuple[int, int, str]]:
+        pseudo = [(m.start(), m.end()) for p in self.PSEUDO_TRIGGERS for m in re.finditer(p, clause_l)]
+        hits = []
+        for state, pats in self.POST_TRIGGERS.items():
+            for p in pats:
+                for m in re.finditer(p, clause_l):
+                    if state == "NEGATED" and any(a <= m.start() < b for a, b in pseudo):
+                        continue
+                    hits.append((m.start(), m.end(), state))
+        return hits
+
     def _assertion(self, clause_l: str, triggers, c0: int, c1: int) -> str:
+        """NegEx/ConText scope: the nearest pre-trigger before the entity, within the token
+        window and with no CONJ terminator in between; a post-trigger after the entity under
+        the same conditions overrides it."""
         state = "PRESENT"
-        pre = [t for t in triggers if t[1] <= c0
-               and len(re.findall(r"[\w/'-]+", clause_l[t[1]:c0])) <= self.max_scope]
+        pre = [t for t in triggers if t[1] <= c0 and self._ntok(clause_l[t[1]:c0]) <= self.max_scope
+               and not self._conj_between(clause_l, t[1], c0)]
         if pre:
             state = max(pre, key=lambda t: t[1])[2]
-        tail = clause_l[c1:c1 + self.post_window]
-        for st, pats in self.POST_TRIGGERS.items():
-            if any(re.search(p, tail) for p in pats):
-                if not any(re.search(p, tail) for p in self.PSEUDO_TRIGGERS):
-                    state = st
+        post = [t for t in self._post_hits(clause_l) if t[0] >= c1 and self._ntok(clause_l[c1:t[0]]) <= self.max_scope
+                and not self._conj_between(clause_l, c1, t[0])]
+        if post:
+            state = min(post, key=lambda t: t[0])[2]
         return state
 
     # ------------------------------------------------------------- laterality
@@ -300,7 +335,7 @@ class ClinicalLinker:
                 lookup = assertion
                 if assertion == "UNCERTAIN" and self.setting == "inpatient":
                     lookup = "PRESENT"   # CM Section II.H: code as if established
-                if lookup in ("NEGATED", "UNCERTAIN"):
+                if lookup in ("NEGATED", "UNCERTAIN", "HYPOTHETICAL"):
                     codes, status = [], "DO_NOT_CODE"
                 else:
                     val = cmap.get(f"{lookup}_{lat}") or cmap.get(f"{lookup}_UNSPECIFIED") or cmap.get(lookup)

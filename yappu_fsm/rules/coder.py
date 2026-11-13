@@ -14,7 +14,7 @@ from .datalog import Fact, Program
 PATIENT = "patient"
 SIDE = {"RIGHT": "right", "LEFT": "left", "BILATERAL": "both"}
 PRED = {"PRESENT": "has", "UNCERTAIN": "uncertain", "HISTORICAL": "history",
-        "FAMILY_HISTORY": "family", "NEGATED": "negated"}
+        "FAMILY_HISTORY": "family", "NEGATED": "negated", "HYPOTHETICAL": "hypothetical"}
 
 
 def concept(entity: str) -> str:

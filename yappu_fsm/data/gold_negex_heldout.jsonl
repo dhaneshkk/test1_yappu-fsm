@@ -1,0 +1,12 @@
+{"note": "Patient is free of chest pain today and has no cough.", "gold": [["chest pain","NEGATED","UNSPECIFIED"],["cough","NEGATED","UNSPECIFIED"]]}
+{"note": "Atrial fibrillation not seen on telemetry.", "gold": [["atrial fibrillation","NEGATED","UNSPECIFIED"]]}
+{"note": "Instructed to watch for fever and return if headache worsens.", "gold": [["fever","HYPOTHETICAL","UNSPECIFIED"],["headache","HYPOTHETICAL","UNSPECIFIED"]]}
+{"note": "Pneumonia cannot be ruled out.", "gold": [["pneumonia","UNCERTAIN","UNSPECIFIED"]]}
+{"note": "Denies headache, fever or cough.", "gold": [["headache","NEGATED","UNSPECIFIED"],["fever","NEGATED","UNSPECIFIED"],["cough","NEGATED","UNSPECIFIED"]]}
+{"note": "Cough present; fever absent.", "gold": [["cough","PRESENT","UNSPECIFIED"],["fever","NEGATED","UNSPECIFIED"]]}
+{"note": "No acute distress. Known hypertension on two agents.", "gold": [["hypertension","PRESENT","UNSPECIFIED"]]}
+{"note": "Shortness of breath due to heart failure, without chest pain.", "gold": [["shortness of breath","PRESENT","UNSPECIFIED"],["heart failure","PRESENT","UNSPECIFIED"],["chest pain","NEGATED","UNSPECIFIED"]]}
+{"note": "The patient was evaluated for stroke, which was ruled out.", "gold": [["stroke","NEGATED","UNSPECIFIED"]]}
+{"note": "Sister had breast pain; mother had colon cancer.", "gold": [["colon cancer","FAMILY_HISTORY","UNSPECIFIED"]]}
+{"note": "No longer smokes; history of nicotine dependence.", "gold": [["nicotine dependence","HISTORICAL","UNSPECIFIED"]]}
+{"note": "Asthma well controlled, no wheeze or cough today.", "gold": [["asthma","PRESENT","UNSPECIFIED"],["cough","NEGATED","UNSPECIFIED"]]}

@@ -1,0 +1,12 @@
+{"note": "Ruled out pneumonia on admission.", "gold": [["pneumonia","NEGATED","UNSPECIFIED"]]}
+{"note": "Pneumonia in the left lower lobe was ruled out.", "gold": [["pneumonia","NEGATED","LEFT"]]}
+{"note": "No history of MI.", "gold": [["myocardial infarction","NEGATED","UNSPECIFIED"]]}
+{"note": "No fever aside from mild cough.", "gold": [["fever","NEGATED","UNSPECIFIED"],["cough","PRESENT","UNSPECIFIED"]]}
+{"note": "Absence of chest pain at rest.", "gold": [["chest pain","NEGATED","UNSPECIFIED"]]}
+{"note": "Headache was not demonstrated on review.", "gold": [["headache","NEGATED","UNSPECIFIED"]]}
+{"note": "Return if fever develops.", "gold": [["fever","HYPOTHETICAL","UNSPECIFIED"]]}
+{"note": "If the patient develops chest pain, call 911.", "gold": [["chest pain","HYPOTHETICAL","UNSPECIFIED"]]}
+{"note": "Cough secondary to pneumonia, no headache.", "gold": [["cough","PRESENT","UNSPECIFIED"],["pneumonia","PRESENT","UNSPECIFIED"],["headache","NEGATED","UNSPECIFIED"]]}
+{"note": "No signs of urinary tract infection.", "gold": [["urinary tract infection","NEGATED","UNSPECIFIED"]]}
+{"note": "Not rule out pneumonia yet, start empiric therapy.", "gold": [["pneumonia","UNCERTAIN","UNSPECIFIED"]]}
+{"note": "Fever never developed after surgery.", "gold": [["fever","NEGATED","UNSPECIFIED"]]}
