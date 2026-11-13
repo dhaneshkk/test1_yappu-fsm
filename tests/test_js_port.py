@@ -33,3 +33,37 @@ console.log(JSON.stringify({{
     for p, js in zip([POEM_1, POEM_2, NANNERI, BROKEN], out["p"]):
         r = validate_nerisai_venba(p)
         assert js == [r.valid, r.vikarpam, [f.thalai_in for f in r.feet]]
+
+
+RULES_JS = pathlib.Path(__file__).resolve().parents[1] / "docs" / "src" / "rules.js"
+
+
+@pytest.mark.skipif(not RULES_JS.exists(), reason="docs/src missing")
+def test_js_rules_match_python():
+    """The tutorial's in-browser Datalog + ordering must give the same codes as RuleCoder,
+    for every demo note, both settings, and with each rule switched off."""
+    import importlib.util
+    import sys
+    tools = pathlib.Path(__file__).resolve().parents[1] / "tools" / "export_tutorial_data.py"
+    spec = importlib.util.spec_from_file_location("export_tutorial_data", tools)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["export_tutorial_data"] = mod
+    spec.loader.exec_module(mod)
+    d = mod.rules_data()
+    script = f"""
+const RJ = require({json.dumps(str(RULES_JS))});
+const d = {json.dumps(d, ensure_ascii=False)};
+const out = {{normal: [], ablation: {{}}}};
+for (const n of d.notes) for (const s of ["outpatient", "inpatient"]) {{
+  const r = RJ.code(d.clauses, n.facts[s], n.findings);
+  out.normal.push({{codes: r.codes, blocked: r.blocked, conflicts: r.conflicts}});
+}}
+for (const rid of Object.keys(d.ablation)) {{
+  out.ablation[rid] = {{}};
+  for (const n of d.notes) out.ablation[rid][n.note] = RJ.code(d.clauses, n.facts.inpatient, n.findings, new Set([rid])).codes;
+}}
+console.log(JSON.stringify(out));"""
+    out = json.loads(subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True).stdout)
+    expected = [n["expected"][s] for n in d["notes"] for s in ("outpatient", "inpatient")]
+    assert out["normal"] == expected
+    assert out["ablation"] == d["ablation"]

@@ -22,7 +22,7 @@ constrained decoding → clinical ICD-10 coding" exploration into one tested pac
 ```bash
 pip install -e ".[dev]"          # core: pure Python, no dependencies
 pip install -e ".[hf,dev]"       # + torch / transformers for constrained decoding
-pytest -q                        # 142 tests; HF tests auto-skip without torch
+pytest -q                        # 143 tests; HF tests auto-skip without torch
 ```
 
 Colab: `notebooks/yappu_fsm_colab_single_cell.ipynb` is one self-contained cell. It embeds the
