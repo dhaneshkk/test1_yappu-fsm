@@ -191,13 +191,13 @@ class Model:
         seen = set() if seen is None else seen
         pad = "  " * depth
         if f[0] == "not":
-            return [f"{pad}not {f[1]}({', '.join(f[2:])})  [absent]"]
+            return [f"{pad}not {f[1]}({', '.join(map(str, f[2:]))})  [absent]"]
         rid, used = self.why.get(f, ("?", ()))
         label = "given" if rid == "fact" else rid
         src = ""
         if rules_by_id and rid in rules_by_id and rules_by_id[rid].source:
             src = f"  « {rules_by_id[rid].source} »"
-        out = [f"{pad}{f[0]}({', '.join(f[1:])})  [{label}]{src}"]
+        out = [f"{pad}{f[0]}({', '.join(map(str, f[1:]))})  [{label}]{src}"]
         if f in seen:
             return out
         seen.add(f)

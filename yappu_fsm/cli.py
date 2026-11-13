@@ -93,6 +93,18 @@ def cmd_serve(a):
         pass
 
 
+def cmd_vision(a):
+    from .vision.pipeline import DEFAULT_MODEL, download_model, run
+    if a.download:
+        download_model()
+        if a.source is None:
+            return
+    events = run(a.source if a.source is not None else "0", a.model or DEFAULT_MODEL, a.zone or ["restricted=0,0,0.4,1"],
+                 a.rules, [c.strip() for c in a.classes.split(",")], a.clahe, not a.no_show, a.max_frames, a.gmc,
+                 a.log, a.save)
+    print(f"{sum(e.kind == 'raised' for e in events)} alerts raised")
+
+
 def cmd_demo_decode(a):
     from .demo import run_demo
     run_demo(seed=a.seed)
@@ -131,6 +143,20 @@ def main(argv=None):
     s.add_argument("--port", type=int, default=8000)
     s.add_argument("--lexicon")
     s.set_defaults(fn=cmd_serve)
+    s = sub.add_parser("vision", help="monochrome YOLOX-Nano + BoT-SORT-style tracking + rule alerts (camera or video)")
+    s.add_argument("--source", help="camera index (default 0) or a video file")
+    s.add_argument("--model", help="path to yolox_nano.onnx (default ~/.cache/yappu/yolox_nano.onnx)")
+    s.add_argument("--download", action="store_true", help="download yolox_nano.onnx to the default path")
+    s.add_argument("--zone", action="append", help="name=x1,y1,x2,y2 as frame fractions; repeatable")
+    s.add_argument("--rules", help="vision rules file (default: bundled vision_rules.ace)")
+    s.add_argument("--classes", default="person,cell phone,cup,bottle,laptop,book")
+    s.add_argument("--clahe", action="store_true", help="contrast equalisation for dim monochrome frames")
+    s.add_argument("--gmc", action="store_true", help="camera-motion compensation (moving camera)")
+    s.add_argument("--no-show", action="store_true")
+    s.add_argument("--max-frames", type=int)
+    s.add_argument("--log", help="append alerts as JSON lines")
+    s.add_argument("--save", help="write the annotated video (mp4)")
+    s.set_defaults(fn=cmd_vision)
     s = sub.add_parser("demo-decode", help="offline constrained-decoding demo (needs torch + transformers)")
     s.add_argument("--seed", type=int, default=0)
     s.set_defaults(fn=cmd_demo_decode)

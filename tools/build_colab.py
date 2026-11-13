@@ -21,6 +21,8 @@ HEADER = r'''# ═════════════════════�
 RUN_TESTS = True          # full pytest suite (~1 min on CPU)
 RUN_SERVER_DEMO = True    # OpenAI-compatible /v1/chat/completions on localhost:8000
 CODING_SETTING = "outpatient"   # or "inpatient"  (ICD-10-CM Official Guidelines IV.H vs II.H)
+RUN_VISION = True         # monochrome YOLOX-Nano + BoT-SORT-style tracking + rule alerts on a sample video
+                          # (live laptop camera: run `yappu vision --source 0` on the laptop itself)
 '''
 
 BODY = r'''
@@ -33,13 +35,23 @@ for rel, text in FILES.items():
     p.write_text(text, encoding="utf-8")
 print(f"wrote {len(FILES)} files to {BASE}")
 
-need = [m for m in ("torch", "transformers", "tokenizers", "pytest") if importlib.util.find_spec(m) is None]
+need = [m for m in ("torch", "transformers", "tokenizers", "pytest", "scipy", "cv2", "onnxruntime")
+        if importlib.util.find_spec(m) is None]
+need = ["opencv-python" if m == "cv2" else m for m in need]
 if need:
     subprocess.run([sys.executable, "-m", "pip", "install", "-q", *need], check=True)
 if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
 for m in [m for m in sys.modules if m == "yappu_fsm" or m.startswith("yappu_fsm.")]:
     del sys.modules[m]   # pick up fresh code when the cell is re-run
+if RUN_VISION:           # model + sample video first, so the vision tests can use the real model
+    MODEL = pathlib.Path.home() / ".cache" / "yappu" / "yolox_nano.onnx"
+    VIDEO = BASE / "vtest.avi"
+    MODEL.parent.mkdir(parents=True, exist_ok=True)
+    for url, dst in [("https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_nano.onnx", MODEL),
+                     ("https://raw.githubusercontent.com/opencv/opencv/master/samples/data/vtest.avi", VIDEO)]:
+        if not dst.exists():
+            urllib.request.urlretrieve(url, dst)
 
 def banner(t): print("\n" + "═" * 78 + f"\n  {t}\n" + "═" * 78)
 
@@ -105,6 +117,30 @@ if RUN_SERVER_DEMO:
                                  headers={"Content-Type": "application/json"})
     resp = json.loads(urllib.request.urlopen(req).read())
     print(json.dumps(json.loads(resp["choices"][0]["message"]["content"])["allowed_codes"]))
+# 6 ── vision ─────────────────────────────────────────────────────────────────
+if RUN_VISION:
+    banner("6 · Monochrome YOLOX-Nano → BoT-SORT-style tracker → rule alerts with proofs")
+    from yappu_fsm.vision.pipeline import run
+    events = run(str(VIDEO), str(MODEL), ["restricted=0,0,0.4,1"], show=False, max_frames=200,
+                 save=str(BASE / "vision_out.mp4"), quiet=True)
+    for e in events:
+        print(f"[{e.t:6.1f}s] {e.kind:<7} {e.event:<15} {'track #' + e.subject if e.subject != 'scene' else 'scene'}")
+    raised = next((e for e in events if e.kind == "raised"), None)
+    if raised:
+        print("proof of the first alert:\n  " + "\n  ".join(raised.proof))
+    try:   # show a few annotated monochrome frames inline
+        import cv2
+        from IPython.display import Image as _Img, display as _display
+        cap = cv2.VideoCapture(str(BASE / "vision_out.mp4"))
+        for k in (40, 100, 160):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, k)
+            ok, fr = cap.read()
+            if ok:
+                _display(_Img(data=cv2.imencode(".jpg", cv2.resize(fr, (576, 432)))[1].tobytes()))
+    except Exception as exc:
+        print("inline preview skipped:", exc)
+    print("annotated video:", BASE / "vision_out.mp4")
+
 print("\ndone ✓")
 '''
 

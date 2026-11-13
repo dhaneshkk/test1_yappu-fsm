@@ -14,15 +14,16 @@ constrained decoding → clinical ICD-10 coding" exploration into one tested pac
 | `yappu_fsm.decoding` | Byte-trie state machines + `VenbaLogitsProcessor` and `ICD10LogitsProcessor` for `model.generate()` |
 | `yappu_fsm.clinical` | Abbreviations, clause walls, NegEx-style assertion, closest-token laterality, phonetic/fuzzy matching, ICD-10 lookup, MCC evaluation |
 | `yappu_fsm.rules` | ICD-10-CM coding rules in ACE-style controlled English, compiled to stratified Datalog, with proof traces |
+| `yappu_fsm.vision` | Monochrome YOLOX-Nano (onnxruntime), BoT-SORT-style tracker, time-window event rules → Datalog alerts with proofs |
 | `yappu_fsm.server` | OpenAI-compatible `/v1/chat/completions` endpoint (stdlib only) |
-| `yappu_fsm.cli` | `yappu asai | validate | code [--rules] | rules | eval | serve | demo-decode` |
+| `yappu_fsm.cli` | `yappu asai | validate | code [--rules] | rules | eval | serve | vision | demo-decode` |
 
 ## Install
 
 ```bash
 pip install -e ".[dev]"          # core: pure Python, no dependencies
 pip install -e ".[hf,dev]"       # + torch / transformers for constrained decoding
-pytest -q                        # 143 tests; HF tests auto-skip without torch
+pytest -q                        # 159 tests; HF tests auto-skip without torch
 ```
 
 Colab: `notebooks/yappu_fsm_colab_single_cell.ipynb` is one self-contained cell. It embeds the
@@ -248,6 +249,58 @@ form, phonetic skeleton, and one-deletion keys, which cover one substitution, in
 deletion or swap. A full scan is still available (`ClinicalLinker(index=False)`), and a test
 checks that both give identical results on the gold notes and 300 random typos. A first word
 more than two edits away from the lexicon term is not retrieved by the index.
+
+## Vision: monochrome laptop camera → YOLOX-Nano → tracking → rule alerts
+
+```bash
+pip install -e ".[vision]"            # onnxruntime, opencv-python, numpy, scipy (no PyTorch)
+yappu vision --download               # yolox_nano.onnx (3.7 MB) -> ~/.cache/yappu/
+yappu vision --source 0 --zone restricted=0,0,0.4,1        # laptop camera, press q to quit
+yappu vision --source clip.mp4 --no-show --save out.mp4 --log alerts.jsonl
+```
+
+The pipeline, per frame:
+
+1. **Monochrome.** The frame is converted to grey, with optional CLAHE (`--clahe`) for dim
+   rooms. The single channel is copied to YOLOX's three input channels, and the preview stays grey.
+2. **YOLOX-Nano** (official ONNX export, 416×416) runs under onnxruntime: grid decode,
+   objectness × class score, class-wise NMS. The score threshold is kept low (0.1) so the
+   tracker's second stage gets the weak boxes.
+3. **BoT-SORT-style tracker** (`vision/tracker.py`, an MIT-licensed reimplementation):
+   * a Kalman filter on (x, y, w, h) with size-proportional noise;
+   * ByteTrack two-stage association: high-score boxes by IoU × score, then low-score boxes by plain IoU;
+   * optional camera-motion compensation (`--gmc`);
+   * a lifecycle state machine TENTATIVE → CONFIRMED ⇄ LOST → REMOVED, logged per track.
+
+   No ReID network is used, since a static laptop camera rarely needs it.
+4. **Temporal facts.** Each track produces `in_zone`, `holds` (an object box at least 50 % inside the
+   person box) and `visible` facts. A timer turns them into duration facts
+   (`in_zone_for(7, restricted, 2.0)`). Gaps shorter than 0.7 s, such as a missed
+   detection or a brief occlusion, don't reset the timer. This is the video counterpart of a NegEx scope window.
+5. **Rules as sentences** (`data/vision_rules.ace`) compile to the same Datalog engine:
+
+   ```text
+   INTRUSION: If a person T is in the restricted-zone for at least 2 seconds then a zone-intrusion alert is raised for the person T.
+   PHONE:     If the person T holds a cell-phone for at least 3 seconds then a phone-use alert is raised for the person T.
+   CROWD:     If at least 2 persons are in the restricted-zone then a crowding alert is raised.
+   ```
+
+   Unknown COCO classes and unknown zones are rejected when the rules load.
+6. **Alert state machine** IDLE → ACTIVE → COOLING → IDLE: each alert is raised once with its
+   proof and cleared after a 3 s cool-down.
+
+Measured on the sandbox CPU with OpenCV's `vtest.avi` pedestrian clip converted to grey: detection
+≈ 21 ms/frame, tracking 0.5–2 ms, rules ≈ 0.1 ms. On a synthetic stay/pass-through
+scenario where the detector misses 25 % of frames, the time-window rules reach MCC **0.941**
+against **0.685** for per-frame alerting (`tests/test_vision.py`).
+
+Rules should fire on **positive evidence**. "Does not hold" is allowed in the rule language, but in
+video a missing detection may only be occlusion or a dark frame. COCO has no helmet or vest
+classes, so PPE rules need a fine-tuned YOLOX class (for example `head_no_helmet`) trained on
+grey frames, using Sharpness-Aware Minimization per the project standard. COCO weights see
+colour during training, so expect lower recall on grey input until then. Tracking quality
+(HOTA, IDF1, ID switches) isn't measured here because there's no ground truth; MCC applies to the
+alert layer.
 
 ## OpenAI-compatible endpoint
 

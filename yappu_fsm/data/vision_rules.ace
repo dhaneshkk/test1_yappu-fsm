@@ -1,0 +1,8 @@
+# Vision safety rules (laptop-camera demo). Zones are given at run time, e.g.
+#   --zone restricted=0,0,0.4,1   (left 40 % of the frame)
+# Objects are COCO classes written with hyphens (cell-phone, cup, bottle, laptop, ...).
+
+INTRUSION: If a person T is in the restricted-zone for at least 2 seconds then a zone-intrusion alert is raised for the person T.
+PHONE: If the person T holds a cell-phone for at least 3 seconds then a phone-use alert is raised for the person T.
+DWELL: If a person T is visible for at least 60 seconds then a long-presence alert is raised for the person T.
+CROWD: If at least 2 persons are in the restricted-zone then a crowding alert is raised.
