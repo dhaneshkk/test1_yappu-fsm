@@ -1,0 +1,23 @@
+{
+  "_comment": "Illustrative ICD-10-CM (US) subset for demos and tests. Verify every code against the official Tabular List before use. E11.* codes presume type 2 diabetes is documented. ICD-10-AM (Australia) codes differ: supply your own lexicon in the same format.",
+  "mild nonproliferative diabetic retinopathy": {
+    "PRESENT_RIGHT": "E11.3291", "PRESENT_LEFT": "E11.3292",
+    "PRESENT_BILATERAL": "E11.3293", "PRESENT_UNSPECIFIED": "E11.3299"
+  },
+  "diabetic retinopathy": {"PRESENT_UNSPECIFIED": "E11.319"},
+  "diabetic nephropathy": {"PRESENT_UNSPECIFIED": "E11.21"},
+  "type 2 diabetes": {"PRESENT_UNSPECIFIED": "E11.9", "FAMILY_HISTORY_UNSPECIFIED": "Z83.3"},
+  "knee osteoarthritis": {
+    "PRESENT_RIGHT": "M17.11", "PRESENT_LEFT": "M17.12",
+    "PRESENT_BILATERAL": "M17.0", "PRESENT_UNSPECIFIED": "M17.9"
+  },
+  "hip pain": {
+    "PRESENT_RIGHT": "M25.551", "PRESENT_LEFT": "M25.552",
+    "PRESENT_BILATERAL": ["M25.551", "M25.552"], "PRESENT_UNSPECIFIED": "M25.559"
+  },
+  "hypertension": {"PRESENT_UNSPECIFIED": "I10", "FAMILY_HISTORY_UNSPECIFIED": "Z82.49"},
+  "shortness of breath": {"PRESENT_UNSPECIFIED": "R06.02"},
+  "chest pain": {"PRESENT_UNSPECIFIED": "R07.9"},
+  "pneumonia": {"PRESENT_UNSPECIFIED": "J18.9"},
+  "myocardial infarction": {"PRESENT_UNSPECIFIED": "I21.9", "HISTORICAL_UNSPECIFIED": "I25.2"}
+}

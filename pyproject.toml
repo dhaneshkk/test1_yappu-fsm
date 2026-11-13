@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yappu-fsm"
+version = "0.2.0"
+description = "Tamil prosody (Yappu Ilakkanam) as finite-state machines, constrained decoding for Hugging Face LLMs, and a rule-based clinical ICD-10 linker"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+dependencies = []
+
+[project.optional-dependencies]
+hf = ["torch>=2.0", "transformers>=4.40", "tokenizers>=0.15"]
+dev = ["pytest>=7.4"]
+
+[project.scripts]
+yappu = "yappu_fsm.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["yappu_fsm*"]
+
+[tool.setuptools.package-data]
+yappu_fsm = ["data/*.json", "data/*.jsonl"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]
+filterwarnings = ["ignore::UserWarning", "ignore::FutureWarning"]

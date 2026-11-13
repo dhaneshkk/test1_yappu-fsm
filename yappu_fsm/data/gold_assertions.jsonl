@@ -1,0 +1,20 @@
+{"note": "Patient denies chest pain, but has uncontrolled hypertension.", "gold": [["chest pain","NEGATED","UNSPECIFIED"],["hypertension","PRESENT","UNSPECIFIED"]]}
+{"note": "History of MI in 2021. Mother had type 2 diabetes.", "gold": [["myocardial infarction","HISTORICAL","UNSPECIFIED"],["type 2 diabetes","FAMILY_HISTORY","UNSPECIFIED"]]}
+{"note": "Rule out pneumonia.", "gold": [["pneumonia","UNCERTAIN","UNSPECIFIED"]]}
+{"note": "Pt has lt knee osteoarthritis and mild NPDR OD.", "gold": [["knee osteoarthritis","PRESENT","LEFT"],["mild nonproliferative diabetic retinopathy","PRESENT","RIGHT"]]}
+{"note": "Exam shows b/l knee osteoarthritis. Mild NPDR OU noted.", "gold": [["knee osteoarthritis","PRESENT","BILATERAL"],["mild nonproliferative diabetic retinopathy","PRESENT","BILATERAL"]]}
+{"note": "Denies SOB, history of MI.", "gold": [["shortness of breath","NEGATED","UNSPECIFIED"],["myocardial infarction","HISTORICAL","UNSPECIFIED"]]}
+{"note": "Chest X-ray clear; pneumonia ruled out.", "gold": [["pneumonia","NEGATED","UNSPECIFIED"]]}
+{"note": "No known drug allergies, takes lisinopril for longstanding hypertension.", "gold": [["hypertension","PRESENT","UNSPECIFIED"]]}
+{"note": "Right hip pain for two weeks. No chest pain.", "gold": [["hip pain","PRESENT","RIGHT"],["chest pain","NEGATED","UNSPECIFIED"]]}
+{"note": "Family history of HTN. Pt has T2DM.", "gold": [["hypertension","FAMILY_HISTORY","UNSPECIFIED"],["type 2 diabetes","PRESENT","UNSPECIFIED"]]}
+{"note": "Possible CAP on imaging, start antibiotics.", "gold": [["pneumonia","UNCERTAIN","UNSPECIFIED"]]}
+{"note": "Labs consistent with diabetic nefropathy.", "gold": [["diabetic nephropathy","PRESENT","UNSPECIFIED"]]}
+{"note": "Pt presents with uncontrolled hypertensn and pnemonia.", "gold": [["hypertension","PRESENT","UNSPECIFIED"],["pneumonia","PRESENT","UNSPECIFIED"]]}
+{"note": "Pneumonia has resolved after treatment.", "gold": [["pneumonia","HISTORICAL","UNSPECIFIED"]]}
+{"note": "Bilateral hip pain worse on stairs.", "gold": [["hip pain","PRESENT","BILATERAL"]]}
+{"note": "Without shortness of breath at rest; chest pain on exertion.", "gold": [["shortness of breath","NEGATED","UNSPECIFIED"],["chest pain","PRESENT","UNSPECIFIED"]]}
+{"note": "Suspected diabetic retinopathy, refer to ophthalmology.", "gold": [["diabetic retinopathy","UNCERTAIN","UNSPECIFIED"]]}
+{"note": "s/p MI 2019, now stable. Denies chest pain.", "gold": [["myocardial infarction","HISTORICAL","UNSPECIFIED"],["chest pain","NEGATED","UNSPECIFIED"]]}
+{"note": "The patient's father had hypertension.", "gold": [["hypertension","FAMILY_HISTORY","UNSPECIFIED"]]}
+{"note": "Chest pain is unlikely to be cardiac; knee osteoarthritis right side.", "gold": [["chest pain","PRESENT","UNSPECIFIED"],["knee osteoarthritis","PRESENT","RIGHT"]]}
