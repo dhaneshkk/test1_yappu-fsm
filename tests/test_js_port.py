@@ -67,3 +67,30 @@ console.log(JSON.stringify(out));"""
     expected = [n["expected"][s] for n in d["notes"] for s in ("outpatient", "inpatient")]
     assert out["normal"] == expected
     assert out["ablation"] == d["ablation"]
+
+
+VISION_JS = pathlib.Path(__file__).resolve().parents[1] / "docs" / "src" / "vision.js"
+
+
+@pytest.mark.skipif(not VISION_JS.exists(), reason="docs/src missing")
+def test_js_timer_matches_python():
+    """The tutorial's alert simulator must reproduce Timer + AlertMachine frame by frame."""
+    import importlib.util
+    import sys
+    tools = pathlib.Path(__file__).resolve().parents[1] / "tools" / "export_tutorial_data.py"
+    spec = importlib.util.spec_from_file_location("export_tutorial_data_v", tools)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["export_tutorial_data_v"] = mod
+    spec.loader.exec_module(mod)
+    ref = mod.timer_reference()
+    script = f"""
+const VJ = require({json.dumps(str(VISION_JS))});
+const ref = {json.dumps(ref)};
+const out = {{}};
+for (const key of Object.keys(ref.expected)) {{
+  const [g, thr] = key.split("|").map(Number);
+  out[key] = VJ.simulate(ref.seen, ref.fps, g, thr, 0).active;
+}}
+console.log(JSON.stringify(out));"""
+    out = json.loads(subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True).stdout)
+    assert out == ref["expected"]

@@ -134,6 +134,87 @@ def rules_data():
             "datalog": coder.program.to_text()}
 
 
+def vision_data(video=None, model=None, frames=300):
+    """Run the real monochrome pipeline on a clip; skipped when model or video are missing."""
+    import base64
+    import os
+    import time
+
+    video = pathlib.Path(video or os.environ.get("YAPPU_TEST_VIDEO", "/home/claude/vision_assets/vtest.avi"))
+    model = pathlib.Path(model or os.environ.get("YAPPU_YOLOX_NANO", pathlib.Path.home() / ".cache/yappu/yolox_nano.onnx"))
+    if not (video.exists() and model.exists()):
+        return None
+    import cv2
+
+    from yappu_fsm.vision.detector import YoloxNano
+    from yappu_fsm.vision.events import EventEngine, parse_vision_rules, parse_zone
+    from yappu_fsm.vision.pipeline import VisionPipeline, draw
+    from yappu_fsm.vision.tracker import BotSortLite
+
+    zones = [parse_zone("restricted=0,0,0.4,1")]
+    rules = parse_vision_rules(pathlib.Path(data_path("vision_rules.ace")).read_text(encoding="utf-8"))
+    cap = cv2.VideoCapture(str(video))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 10
+    pipe = VisionPipeline(YoloxNano(str(model), classes=["person", "cell phone", "cup", "bottle", "laptop", "book"]),
+                          BotSortLite(frame_rate=fps), EventEngine(rules, zones))
+    snaps, alerts, ms, ndet = [], [], {"detect": [], "track": [], "rules": []}, []
+    for i in range(frames):
+        ok, frame = cap.read()
+        if not ok:
+            break
+        res = pipe.process(frame, i / fps)
+        for k in ms:
+            ms[k].append(res.ms[k])
+        ndet.append(len([d for d in res.detections if d.score >= 0.5]))
+        for e in res.events:
+            alerts.append({"t": round(e.t, 2), "kind": e.kind, "subject": e.subject, "event": e.event, "proof": e.proof})
+        if i in (90, 190):
+            img = draw(res, zones, pipe.engine.alerts.active())
+            ok, buf = cv2.imencode(".jpg", cv2.resize(img, (576, 432)), [cv2.IMWRITE_JPEG_QUALITY, 72])
+            snaps.append({"frame": i, "t": round(i / fps, 1), "jpg": base64.b64encode(buf.tobytes()).decode(),
+                          "dets": [{"label": d.label, "score": round(d.score, 2)} for d in res.detections if d.score >= 0.3][:12]})
+    tracks = []
+    for tr in pipe.tracker.removed + pipe.tracker.tracks:
+        if not any("CONFIRMED" in h for h in tr.history):
+            continue
+        segs, cur, start = [], None, None
+        for h in tr.history:
+            f, change = h.split(":")
+            new = change.split("->")[1]
+            if cur is not None:
+                segs.append([cur, start, int(f)])
+            cur, start = new, int(f)
+        segs.append([cur, start, pipe.tracker.frame if cur != "REMOVED" else start])
+        tracks.append({"id": tr.tid, "segs": [s for s in segs if s[0] != "REMOVED" and s[2] > s[1]]})
+    tracks.sort(key=lambda t: t["id"])
+    avg = {k: round(sum(v) / len(v), 2) for k, v in ms.items()}
+    return {"fps": fps, "frames": len(ndet), "snaps": snaps, "alerts": alerts, "tracks": tracks, "ms": avg,
+            "ndet": ndet, "rules": [r.text for r in rules]}
+
+
+def timer_reference():
+    """Deterministic presence pattern + Python Timer/AlertMachine output, to test the JS port."""
+    import random
+
+    from yappu_fsm.vision.events import AlertMachine, Timer
+    rng = random.Random(3)
+    fps, seen = 10, []
+    for i in range(300):
+        t = i / fps
+        seen.append(bool(5 <= t < 17 and rng.random() > 0.25) or bool(22 <= t < 22.8 and rng.random() > 0.25))
+    out = {}
+    for grace, thr in [(0.7, 2.0), (0.0, 2.0), (1.5, 1.0)]:
+        timer, alerts, active = Timer(grace), AlertMachine(0.0), []
+        for i, s in enumerate(seen):
+            t = i / fps
+            timer.observe(("in", "1", "z"), s, t)
+            derived = {("1", "x")} if timer.duration(("in", "1", "z"), t) >= thr else set()
+            alerts.step(derived, t, {})
+            active.append(bool(alerts.active()))
+        out[f"{grace}|{thr}"] = active
+    return {"seen": seen, "fps": fps, "expected": out}
+
+
 def gold_summary():
     out = []
     for name, label in [("gold_assertions.jsonl", "original synthetic set"), ("gold_negex.jsonl", "NegEx tuning set"),
@@ -155,6 +236,8 @@ def main():
                     for e in lex.entries],
         "icd_lexicon_size": len(LEX),
         "rules": rules_data(),
+    "vision": vision_data(),
+    "timer_ref": timer_reference(),
         "gold_sets": gold_summary(),
         # measured in this repo's sandbox (Python 3.13, CPU), see README "Performance"
         "heldout_before_after": {"before": {"assertion_mcc": 0.619, "codable_mcc": 0.539},

@@ -173,6 +173,15 @@ mark.HYPOTHETICAL { color: #0f766e; box-shadow: inset 0 -2px #14b8a6; }
 .proof .src { color: var(--muted); font-family: var(--f-body); font-style: italic; }
 .proof .tg { color: var(--accent); }
 details summary { cursor: pointer; font: 600 14px var(--f-display); }
+.snaps { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.snaps figure { margin: 0; }
+.snaps img { width: 100%; border-radius: 8px; border: 1px solid var(--line); display: block; }
+.snaps figcaption { font: 13px var(--f-display); color: var(--muted); margin-top: 4px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 12px 0; }
+.tile { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--paper); }
+.alertlist { display: grid; gap: 6px; }
+.alertlist details { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--paper); }
+.alertlist summary { font: 600 14px var(--f-mono); }
 footer { margin-top: 60px; color: var(--muted); font-size: 14px; max-width: 66ch; }
 @media (max-width: 900px) {
   .shell { grid-template-columns: 1fr; }
@@ -232,7 +241,7 @@ footer { margin-top: 60px; color: var(--muted); font-size: 14px; max-width: 66ch
 <div class="shell">
 <nav class="rail" aria-label="Chapters">
   <div class="brand">Yappu FSM</div>
-  <div class="sub">From Tamil meter to safe ICD-10-CM coding</div>
+  <div class="sub">From Tamil meter to safe ICD-10-CM coding and camera alerts</div>
   <ol id="toc">
     <li class="part">Part I · The poetry engine</li>
     <li><a href="#beats"><span class="n">01</span>Beats</a></li>
@@ -251,7 +260,12 @@ footer { margin-top: 60px; color: var(--muted); font-size: 14px; max-width: 66ch
     <li><a href="#speed"><span class="n">12</span>Speed at scale</a></li>
     <li><a href="#icd"><span class="n">13</span>Safe code emission</a></li>
     <li><a href="#mcc"><span class="n">14</span>Measuring with MCC</a></li>
-    <li><a href="#run"><span class="n">15</span>Run it yourself</a></li>
+    <li class="part">Part IV · Eyes</li>
+    <li><a href="#vision"><span class="n">15</span>Seeing in grey</a></li>
+    <li><a href="#tracks"><span class="n">16</span>Tracks as state machines</a></li>
+    <li><a href="#alerts"><span class="n">17</span>Rules over time</a></li>
+    <li class="part">Use it</li>
+    <li><a href="#run"><span class="n">18</span>Run it yourself</a></li>
   </ol>
 </nav>
 
@@ -259,7 +273,7 @@ footer { margin-top: 60px; color: var(--muted); font-size: 14px; max-width: 66ch
 <header class="hero">
   <div class="eyebrow">An interactive tutorial for yappu-fsm</div>
   <h1>How a 2,000-year-old meter teaches machines to stay in line</h1>
-  <p class="lede">Tamil prosody turns poetry into a finite-state machine. This tutorial builds that machine one rule at a time, uses it to steer a language model, and then applies the same idea to patient charts: NegEx scopes decide what is negated, coding rules written as plain English sentences run as Datalog, and a trie makes invented ICD-10-CM codes impossible.</p>
+  <p class="lede">Tamil prosody turns poetry into a finite-state machine. This tutorial builds that machine one rule at a time, uses it to steer a language model, and then applies the same idea to patient charts: NegEx scopes decide what is negated, coding rules written as plain English sentences run as Datalog, and a trie makes invented ICD-10-CM codes impossible. Part IV gives the machine eyes: a monochrome camera, YOLOX-Nano, a tracker, and alerts that arrive with proofs.</p>
   <div class="legend-row">
     <span><i class="sw" style="background:var(--ner)"></i>Ner asai (1)</span>
     <span><i class="sw" style="background:var(--nirai)"></i>Nirai asai (0)</span>
@@ -560,12 +574,60 @@ footer { margin-top: 60px; color: var(--muted); font-size: 14px; max-width: 66ch
   </div>
 </section>
 
+<!-- ══════════════ 15 VISION ══════════════ -->
+<section class="ch" id="vision">
+  <div class="eyebrow">Chapter 15 · Seeing in grey</div>
+  <h2>A monochrome camera, YOLOX-Nano, no PyTorch</h2>
+  <figure class="comic" id="strip9"></figure>
+  <div class="prose">
+    <p>Each camera frame is converted to grey, letterboxed to 416×416 with the YOLOX padding value 114, and the single channel is copied into the three channels the model expects. YOLOX-Nano runs from its official ONNX export under onnxruntime, so a laptop needs no GPU and no PyTorch. The decoder turns the 3,549 anchor outputs into boxes, multiplies objectness by class probability, and keeps the best box per object with non-maximum suppression. The score threshold stays low (0.1) on purpose: the tracker needs the weak boxes.</p>
+    <p>These two frames are real output: OpenCV's pedestrian clip converted to grey, run through the package. The faint line marks the restricted zone (left 40 %); thick boxes are people with an active alert.</p>
+  </div>
+  <div class="bench">
+    <h4>Real frames from the pipeline</h4>
+    <div class="snaps" id="vSnaps"></div>
+    <div class="tiles" id="vTiles"></div>
+  </div>
+  <div class="callout">COCO weights were trained on colour, so grey input lowers recall, especially for people cut off at the frame edge. COCO also has no helmet or vest class: safety-gear rules need a class fine-tuned on grey frames.</div>
+</section>
+
+<!-- ══════════════ 16 TRACKS ══════════════ -->
+<section class="ch" id="tracks">
+  <div class="eyebrow">Chapter 16 · Tracks as state machines</div>
+  <h2>Every track lives through four states</h2>
+  <div class="prose">
+    <p>The tracker follows the BoT-SORT recipe without the appearance network. A Kalman filter predicts each box. High-confidence detections are matched first by overlap; low-confidence ones then rescue tracks that would otherwise be lost, which matters on dim grey frames. A track must be matched twice before it counts, so a one-frame false detection never becomes an alert. Each track moves through a small state machine, logged for audit:</p>
+  </div>
+  <div class="bench"><h4>Track lifecycle</h4><div id="lifeSvg"></div></div>
+  <div class="bench"><h4>Real track timeline (first 30 s of the clip)</h4><div id="gantt" style="overflow-x:auto"></div>
+    <div class="legend-row"><span><i class="sw" style="background:var(--muted)"></i>tentative</span><span><i class="sw" style="background:var(--nirai)"></i>confirmed</span><span><i class="sw" style="background:var(--ner)"></i>lost (still remembered)</span><span><i class="sw" style="background:var(--bad)"></i>zone-intrusion raised</span></div></div>
+</section>
+
+<!-- ══════════════ 17 ALERTS ══════════════ -->
+<section class="ch" id="alerts">
+  <div class="eyebrow">Chapter 17 · Rules over time</div>
+  <h2>A missed frame is not an empty room</h2>
+  <div class="prose">
+    <p>Tracks become facts: <code>in_zone</code>, <code>holds</code> (an object box at least half inside a person box) and <code>visible</code>. A timer turns them into durations, and a gap shorter than the grace period does not reset it. This is NegEx's scope window, moved from words to seconds. The vision rules are sentences compiled to the same Datalog engine as the coding rules, and an alert state machine raises each alert once and clears it after a cool-down.</p>
+  </div>
+  <div class="bench"><h4>The bundled rules</h4><div id="vRules" class="rulelist" style="max-height:none"></div></div>
+  <div class="bench">
+    <h4>Alert simulator (same Timer and alert logic as Python, tested)</h4>
+    <p class="prose" style="margin:0 0 8px; font-size:15px">A person stands in the zone from 5 s to 17 s; a passer-by crosses it for 0.8 s at 22 s. The detector misses frames at random. Gold says “intrusion” from 7 s (two seconds in) to 17 s.</p>
+    <div class="sliders" id="simSl"></div>
+    <div class="row" style="margin:8px 0"><button id="simSeed">New random misses</button></div>
+    <div id="simSvg" style="overflow-x:auto"></div>
+    <div class="two"><div class="stat" id="simMccR"></div><div class="stat" id="simMccN"></div></div>
+  </div>
+  <div class="bench"><h4>Real alerts from the clip, with proofs</h4><div class="alertlist" id="vAlerts"></div></div>
+</section>
+
 <!-- ══════════════ 12 RUN ══════════════ -->
 <section class="ch" id="run">
-  <div class="eyebrow">Chapter 15 · Run it yourself</div>
+  <div class="eyebrow">Chapter 18 · Run it yourself</div>
   <h2>One Colab cell, one CLI, one endpoint</h2>
   <div class="prose">
-    <p><b>Colab.</b> Open <code>notebooks/yappu_fsm_colab_single_cell.ipynb</code> in Colab and run its only cell. The whole package is embedded in it: it writes the files, runs the test suite, validates a Venba, codes a note, runs constrained decoding through <code>model.generate()</code>, and starts the endpoint. Switch <code>CODING_SETTING</code> to <code>"inpatient"</code> at the top to apply Guideline II.H.</p>
+    <p><b>Colab.</b> Open <code>notebooks/yappu_fsm_colab_single_cell.ipynb</code> in Colab and run its only cell. The whole package is embedded in it: it writes the files, runs the test suite, validates a Venba, codes a note, runs constrained decoding through <code>model.generate()</code>, starts the endpoint, and runs the monochrome vision pipeline on a sample clip, showing annotated frames inline. Colab cannot reach a laptop camera; for live video run <code>yappu vision --source 0</code> on the laptop. Switch <code>CODING_SETTING</code> to <code>"inpatient"</code> at the top to apply Guideline II.H.</p>
   </div>
   <div class="bench">
     <div class="copyrow"><h4>Command line</h4><button data-copy="cli">Copy</button></div>
@@ -578,7 +640,11 @@ yappu rules            # paraphrase every coding rule
 yappu rules --datalog  # the compiled program
 yappu eval --gold yappu_fsm/data/gold_negex_heldout.jsonl
 yappu demo-decode
-yappu serve --port 8000</pre>
+yappu serve --port 8000
+
+pip install -e ".[vision]"           # onnxruntime + OpenCV, no PyTorch
+yappu vision --download              # yolox_nano.onnx, 3.7 MB
+yappu vision --source 0 --zone restricted=0,0,0.5,1 --log alerts.jsonl   # laptop camera, q quits</pre>
     <div class="copyrow"><h4>OpenAI-compatible endpoint</h4><button data-copy="api">Copy</button></div>
 <pre id="api">from openai import OpenAI
 c = OpenAI(base_url="http://localhost:8000/v1", api_key="unused")
@@ -596,13 +662,14 @@ out = model.generate(**tokenizer(f"Note: {note}\nCODES:", return_tensors="pt"),
                      logits_processor=LogitsProcessorList([proc]), max_new_tokens=40)</pre>
   </div>
   <div class="callout">What the processors guarantee: every completed output is in the allowed language. A Venba always validates, and every code comes from the linker's allowed set without repeats. They do not make a code clinically right; a certified coder reviews the output.</div>
-  <footer>Built from the yappu-fsm repository (143 tests). Every figure on this page comes from the package's code or its exported traces. ICD-10-CM codes are a demo subset; verify against the current CMS release. Characters: Kokku the crane (after the patient crane in the Nanneri verse), Mathi the moon, Ezhu the letter, Bit the model. All original.</footer>
+  <footer>Built from the yappu-fsm repository (160 tests). Every figure on this page comes from the package's code or its exported traces. ICD-10-CM codes are a demo subset; verify against the current CMS release. Characters: Kokku the crane (after the patient crane in the Nanneri verse), Mathi the moon, Ezhu the letter, Bit the model. All original.</footer>
 </section>
 </main>
 </div>
 
 <script>/*__PROSODY_JS__*/</script>
 <script>/*__RULES_JS__*/</script>
+<script>/*__VISION_JS__*/</script>
 <script>const DATA = /*__DATA_JSON__*/;</script>
 <script>
 "use strict";
@@ -727,6 +794,15 @@ function drawComics() {
       say: [{ x: 14, y: 30, w: 170, t: "And I can run it, and it always terminates.", tx: 200, ty: 90, max: 24 }] },
     { bg: NIGHT, deco: [stars(10, 13)], cap: "3", cast: [{ who: "mathi", x: 20, y: 46, w: 90, h: 90 }],
       say: [{ x: 116, y: 40, w: 172, t: "Every code comes with its proof: which rule, which facts.", tx: 100, ty: 80, max: 24 }] },
+  ]);
+  comic("strip9", "Strip 9 · Bit gets eyes", [
+    { bg: "#d9dcd6", cap: "1", deco: [`<circle cx="232" cy="96" r="26" fill="#1b2230"/><circle cx="232" cy="96" r="13" fill="#9aa3b2"/><rect x="200" y="64" width="64" height="12" rx="4" fill="#5d6676"/>`],
+      cast: [{ who: "bit", x: 180, y: 70, w: 100, h: 118 }],
+      say: [{ x: 12, y: 30, w: 160, t: "No colour today. Grey is enough to find people.", tx: 186, ty: 100, max: 22 }] },
+    { bg: "#d9dcd6", cap: "2", cast: [{ who: "kokku", x: 180, y: 44, w: 100, h: 142 }],
+      say: [{ x: 12, y: 30, w: 168, t: "A missed frame is not an empty room. I wait before I forget.", tx: 190, ty: 70, max: 22 }] },
+    { bg: NIGHT, deco: [stars(10, 17)], cap: "3", cast: [{ who: "mathi", x: 20, y: 40, w: 90, h: 90 }],
+      say: [{ x: 116, y: 40, w: 172, t: "Two seconds in the zone, then the alert, with its proof.", tx: 100, ty: 80, max: 22 }] },
   ]);
   comic("strip6", "Strip 6 · Proof, not vibes", [
     { bg: NIGHT, deco: [stars(12, 9)], cap: "1", cast: [{ who: "mathi", x: 200, y: 30, w: 86, h: 86 }],
@@ -1075,6 +1151,101 @@ function drawHeldout() {
   $("#goldTable").innerHTML = `<table class="t"><thead><tr><th>gold set (current linker)</th><th>pairs</th><th>assertion MCC</th><th>codable MCC</th></tr></thead><tbody>${DATA.gold_sets.map((g) => `<tr><td>${esc(g.label)} <span class="mono" style="color:var(--muted)">${esc(g.name)}</span></td><td>${g.n}</td><td>${g.assertion_mcc.toFixed(3)}</td><td>${g.codable_mcc.toFixed(3)}</td></tr>`).join("")}</tbody></table>`;
 }
 
+/* ───────────── 15–17 vision ───────────── */
+const V = DATA.vision;
+function drawVision() {
+  if (!V) { $("#vSnaps").innerHTML = '<p class="mono">vision data not exported</p>'; return; }
+  $("#vSnaps").innerHTML = V.snaps.map((sn) => `<figure><img alt="Monochrome frame ${sn.frame} with tracked people and zone" src="data:image/jpeg;base64,${sn.jpg}"><figcaption>frame ${sn.frame} · ${sn.t}s · ${sn.dets.filter((d) => d.label === "person").length} person detections ≥ 0.3</figcaption></figure>`).join("");
+  $("#vTiles").innerHTML = [["detect", "YOLOX-Nano on CPU"], ["track", "tracker"], ["rules", "facts + Datalog + alerts"]].map(([k, l]) => `<div class="tile"><div class="stat" style="font-size:26px">${V.ms[k]} ms<small>${l}, mean per frame</small></div></div>`).join("") + `<div class="tile"><div class="stat" style="font-size:26px">${V.tracks.length}<small>confirmed tracks in ${V.frames} frames</small></div></div>`;
+}
+function drawLifecycle() {
+  const N = [["NEW", 66, 70], ["TENTATIVE", 186, 70], ["CONFIRMED", 336, 70], ["LOST", 336, 170], ["REMOVED", 486, 170]];
+  const pos = Object.fromEntries(N.map(([n, x, y]) => [n, [x, y]]));
+  const E = [["NEW", "TENTATIVE", "confident box"], ["TENTATIVE", "CONFIRMED", "matched again"], ["CONFIRMED", "LOST", "no match"], ["LOST", "CONFIRMED", "re-matched"], ["LOST", "REMOVED", "lost > buffer"], ["TENTATIVE", "REMOVED", "", true]];
+  let s = `<svg viewBox="0 0 560 230" style="width:100%;max-width:620px" role="img" aria-label="Track lifecycle state machine"><defs><marker id="la" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker></defs>`;
+  E.forEach(([a, b, lab, curve]) => {
+    const [x1, y1] = pos[a], [x2, y2] = pos[b];
+    let d;
+    if (a === "CONFIRMED" && b === "LOST") d = `M${x1 - 14} ${y1 + 22} L ${x2 - 14} ${y2 - 22}`;
+    else if (a === "LOST" && b === "CONFIRMED") d = `M${x1 + 14} ${y1 - 22} L ${x2 + 14} ${y2 + 22}`;
+    else if (curve) d = `M${x1} ${y1 + 22} Q ${x1 + 40} 215 ${x2 - 50} ${y2 + 14}`;
+    else d = `M${x1 + (x2 > x1 ? 52 : 0)} ${y1 + (y2 > y1 ? 22 : 0)} L ${x2 - (x2 > x1 ? 52 : 0)} ${y2 - (y2 > y1 ? 22 : 0)}`;
+    s += `<path d="${d}" fill="none" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#la)"/>`;
+    const lx = a === "CONFIRMED" && b === "LOST" ? x1 - 90 : a === "LOST" && b === "CONFIRMED" ? x1 + 22 : curve ? x1 + 30 : (x1 + x2) / 2 - 30, ly = curve ? 206 : a === "CONFIRMED" || (a === "LOST" && b === "CONFIRMED") ? (y1 + y2) / 2 + 4 : y1 - 30;
+    if (lab) s += `<text x="${lx}" y="${ly}" font-family="Bricolage Grotesque" font-size="11.5" fill="var(--muted)">${lab}</text>`;
+  });
+  const col = { NEW: "var(--paper)", TENTATIVE: "var(--paper)", CONFIRMED: "var(--nirai)", LOST: "var(--ner)", REMOVED: "var(--paper)" };
+  N.forEach(([n, x, y]) => { const filled = n === "CONFIRMED" || n === "LOST"; s += `<rect x="${x - 52}" y="${y - 22}" width="104" height="44" rx="22" fill="${col[n]}" stroke="var(--line)" stroke-width="2"/><text x="${x}" y="${y + 5}" text-anchor="middle" font-family="Bricolage Grotesque" font-weight="700" font-size="12.5" fill="${filled ? "#fff" : "var(--ink)"}">${n}</text>`; });
+  $("#lifeSvg").innerHTML = s + "</svg>";
+}
+function drawGantt() {
+  if (!V) return;
+  const rows = V.tracks, W = 860, rowH = 16, L = 46, T = 8, H = T + rows.length * rowH + 30, F = V.frames;
+  const x = (f) => L + ((W - L - 10) * f) / F;
+  const col = { TENTATIVE: "var(--muted)", CONFIRMED: "var(--nirai)", LOST: "var(--ner)" };
+  let s = `<svg viewBox="0 0 ${W} ${H}" style="min-width:640px;width:100%" role="img" aria-label="Track lifecycle timeline">`;
+  for (let sec = 0; sec <= F / V.fps; sec += 5) s += `<line x1="${x(sec * V.fps)}" x2="${x(sec * V.fps)}" y1="${T}" y2="${H - 22}" stroke="var(--line)"/><text x="${x(sec * V.fps)}" y="${H - 8}" text-anchor="middle" font-family="JetBrains Mono" font-size="10.5" fill="var(--muted)">${sec}s</text>`;
+  rows.forEach((tr, i) => {
+    const y = T + i * rowH;
+    s += `<text x="${L - 6}" y="${y + 11}" text-anchor="end" font-family="JetBrains Mono" font-size="10.5" fill="var(--muted)">#${tr.id}</text>`;
+    tr.segs.forEach(([st, a, b]) => (s += `<rect x="${x(a)}" y="${y + 2}" width="${Math.max(1.5, x(b) - x(a))}" height="${rowH - 5}" rx="2" fill="${col[st] || "var(--line)"}"/>`));
+    V.alerts.filter((e) => e.kind === "raised" && e.subject === String(tr.id)).forEach((e) => (s += `<circle cx="${x(e.t * V.fps)}" cy="${y + rowH / 2}" r="4.5" fill="var(--bad)" stroke="var(--card)" stroke-width="1.5"><title>${esc(e.event)} at ${e.t}s</title></circle>`));
+  });
+  $("#gantt").innerHTML = s + "</svg>";
+}
+function drawVisionRules() {
+  if (!V) return;
+  $("#vRules").innerHTML = V.rules.map((r) => `<label style="grid-template-columns:1fr;cursor:default"><span>${esc(r)}</span></label>`).join("");
+  $("#vAlerts").innerHTML = V.alerts.map((e) => e.kind === "raised"
+    ? `<details><summary>${e.t.toFixed(1)}s · raised · ${esc(e.event)} · ${e.subject === "scene" ? "scene" : "track #" + esc(e.subject)}</summary><pre style="margin:6px 0 0">${esc(e.proof.join("\n"))}</pre></details>`
+    : `<div class="mono" style="font-size:13px;color:var(--muted);padding:2px 10px">${e.t.toFixed(1)}s · cleared · ${esc(e.event)} · ${e.subject === "scene" ? "scene" : "track #" + esc(e.subject)}</div>`).join("");
+}
+const SIM = { miss: 25, grace: 0.7, thr: 2.0, seed: 3 };
+function rng(seed) { return () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function drawSim() {
+  const box = $("#simSl");
+  if (!box.children.length) {
+    [["miss", "missed frames %", 0, 60, 1], ["grace", "grace period (s)", 0, 2, 0.1], ["thr", "threshold (s)", 0.5, 4, 0.1]].forEach(([k, lab, mn, mx, st]) => {
+      const l = el("label", { for: "sim-" + k }, `${lab} <span class="mono" id="simv-${k}">${SIM[k]}</span>`);
+      const r = el("input", { type: "range", id: "sim-" + k, min: mn, max: mx, step: st, value: SIM[k] });
+      r.oninput = () => { SIM[k] = +r.value; drawSim(); };
+      l.appendChild(r); box.appendChild(l);
+    });
+    $("#simSeed").onclick = () => { SIM.seed = Math.floor(Math.random() * 1e6); drawSim(); };
+  }
+  ["miss", "grace", "thr"].forEach((k) => ($("#simv-" + k).textContent = SIM[k]));
+  const fps = 10, N = 300, r = rng(SIM.seed), p1 = [], p2 = [], gold = [], naive = [], rules = [], dur = [];
+  const timer = new VJ.Timer(SIM.grace), am = new VJ.AlertMachine(0);
+  for (let i = 0; i < N; i++) {
+    const t = i / fps, a = t >= 5 && t < 17 && r() * 100 >= SIM.miss, b = t >= 22 && t < 22.8 && r() * 100 >= SIM.miss;
+    p1.push(a); p2.push(b); gold.push(t >= 7 && t < 17); naive.push(a || b);
+    timer.observe("1", a, t); timer.observe("2", b, t);
+    const d1 = timer.duration("1", t), d2 = timer.duration("2", t);
+    dur.push(Math.max(d1, d2));
+    const derived = new Set([d1 >= SIM.thr ? "1" : null, d2 >= SIM.thr ? "2" : null].filter(Boolean));
+    am.step(derived, t); rules.push(am.active().length > 0);
+  }
+  const W = 860, L = 120, rowH = 22, rowsDef = [["gold: intrusion", gold, "var(--ink)"], ["person seen", p1, "var(--nirai)"], ["passer-by seen", p2, "var(--nirai)"], ["per-frame alert", naive, "var(--bad)"], ["rule alert", rules, "var(--ok)"]];
+  const x = (i) => L + ((W - L - 10) * i) / N;
+  let s = `<svg viewBox="0 0 ${W} ${rowsDef.length * rowH + 80}" style="min-width:640px;width:100%" role="img" aria-label="Alert simulation timeline">`;
+  rowsDef.forEach(([lab, arr, c], ri) => {
+    const y = 6 + ri * rowH;
+    s += `<text x="${L - 8}" y="${y + 14}" text-anchor="end" font-family="Bricolage Grotesque" font-size="12" fill="var(--ink)">${lab}</text><rect x="${L}" y="${y + 3}" width="${W - L - 10}" height="${rowH - 6}" fill="var(--paper)"/>`;
+    let start = null;
+    arr.concat([false]).forEach((v, i) => { if (v && start === null) start = i; if (!v && start !== null) { s += `<rect x="${x(start)}" y="${y + 3}" width="${Math.max(1, x(i) - x(start))}" height="${rowH - 6}" fill="${c}"/>`; start = null; } });
+  });
+  const y0 = 6 + rowsDef.length * rowH + 4, hgt = 40, maxd = Math.max(SIM.thr * 1.5, ...dur);
+  s += `<text x="${L - 8}" y="${y0 + 24}" text-anchor="end" font-family="Bricolage Grotesque" font-size="12" fill="var(--ink)">timer (s)</text>`;
+  s += `<polyline points="${dur.map((d, i) => `${x(i)},${y0 + hgt - (hgt * d) / maxd}`).join(" ")}" fill="none" stroke="var(--accent)" stroke-width="1.8"/>`;
+  s += `<line x1="${L}" x2="${W - 10}" y1="${y0 + hgt - (hgt * SIM.thr) / maxd}" y2="${y0 + hgt - (hgt * SIM.thr) / maxd}" stroke="var(--bad)" stroke-dasharray="4 4"/><text x="${W - 12}" y="${y0 + hgt - (hgt * SIM.thr) / maxd - 4}" text-anchor="end" font-family="JetBrains Mono" font-size="10.5" fill="var(--bad)">threshold ${SIM.thr}s</text>`;
+  for (let sec = 0; sec <= 30; sec += 5) s += `<text x="${x(sec * fps)}" y="${y0 + hgt + 16}" text-anchor="middle" font-family="JetBrains Mono" font-size="10.5" fill="var(--muted)">${sec}s</text>`;
+  $("#simSvg").innerHTML = s + "</svg>";
+  const mccOf = (p) => { let tp = 0, tn = 0, fp = 0, fn = 0; gold.forEach((g, i) => { if (g && p[i]) tp++; else if (!g && !p[i]) tn++; else if (!g && p[i]) fp++; else fn++; }); return mccBinary(tp, tn, fp, fn); };
+  const mr = mccOf(rules), mn = mccOf(naive);
+  $("#simMccR").innerHTML = `<span style="color:var(--ok)">${mr.toFixed(3)}</span><small>MCC, rules with timer</small>`;
+  $("#simMccN").innerHTML = `<span style="color:var(--bad)">${mn.toFixed(3)}</span><small>MCC, per-frame alerting</small>`;
+}
+
 /* ───────────── wiring ───────────── */
 function init() {
   drawComics();
@@ -1107,6 +1278,7 @@ function init() {
   $("#rNone").onclick = () => { RD.rules.forEach((r) => rDisabled.add(r.rid)); document.querySelectorAll("#rList input").forEach((c) => { c.checked = false; c.parentElement.classList.add("off"); }); drawRules(); };
   drawRules();
   drawSpeed(); drawHeldout();
+  drawVision(); drawLifecycle(); drawGantt(); drawVisionRules(); drawSim();
   $("#kAuto").onclick = kAuto; $("#kReset").onclick = () => drawKeys(true);
   drawCM(); drawMcc();
   document.querySelectorAll("[data-copy]").forEach((b) => (b.onclick = async () => { try { await navigator.clipboard.writeText($("#" + b.dataset.copy).textContent); b.textContent = "Copied"; } catch { b.textContent = "Select and copy"; } setTimeout(() => (b.textContent = "Copy"), 1600); }));
