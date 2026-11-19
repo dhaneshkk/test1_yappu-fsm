@@ -23,7 +23,8 @@ constrained decoding → clinical ICD-10 coding" exploration into one tested pac
 ```bash
 pip install -e ".[dev]"          # core: pure Python, no dependencies
 pip install -e ".[hf,dev]"       # + torch / transformers for constrained decoding
-pytest -q                        # 159 tests; HF tests auto-skip without torch
+pip install -e ".[asp,dev]"      # + clingo for the ASP rule backend
+pytest -q                        # 204 tests; HF / ASP tests auto-skip without torch / clingo
 ```
 
 Colab: `notebooks/yappu_fsm_colab_single_cell.ipynb` is one self-contained cell. It embeds the
@@ -235,6 +236,29 @@ SEQ_DX_SYMPTOM: If a code C is assigned and the code C is a symptom code and a c
 
 `"Pt with T2DM and CKD. Also HTN. Probable CAP. Cough for three days."` → `E11.22, I12.9, N18.9, R05.9`.
 This is a default order for review; principal-diagnosis selection (Section II) is not modelled.
+
+### ASP backend (clingo)
+
+The same compiled clauses also run on [clingo](https://potassco.org/clingo/) as an Answer Set
+Program (`pip install "yappu-fsm[asp]"`). The rules are stratified, so the ASP program has exactly
+one answer set, and it equals the Datalog model. `AspRuleCoder` is a drop-in `RuleCoder`: each
+clause also derives a helper atom `yappu_why_<i>(…)` over its variables, so the same proof trees are
+rebuilt from the answer set. `tests/test_asp.py` checks codes, blocked codes, conflicts, proofs and
+full fact sets against the Datalog engine. It covers every demo note in both settings, 300 random
+notes, and the rule set with each rule switched off in turn.
+
+```bash
+yappu rules --asp                                               # the program in clingo syntax
+yappu code "Pt with T2DM and CKD. Also HTN." --rules --backend asp   # same result and proofs as Datalog
+yappu code "T1DM noted; also T2DM per old records." --alternatives
+#   valid code sets (Excludes1 resolved, fewest codes dropped):  1. E10.9   2. E11.9
+```
+
+What ASP adds is `AspRuleCoder.alternatives()`. The Datalog backend flags an Excludes1 conflict
+for review. ASP makes it a choice instead: drop one code of each conflicting pair, keep the drops
+to a minimum (`#minimize`), and return every optimal code set for the coder to pick from.
+The built-in Datalog engine stays the default. It has no dependencies and drives the browser
+tutorial.
 
 The language is a coding-rule **subset in the spirit of ACE** and is parsed by this package; it
 does not call the Attempto Parsing Engine. It has no wildcards over code families (E11.9 needs

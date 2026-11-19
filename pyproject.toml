@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "yappu-fsm"
-version = "0.2.0"
+version = "0.3.0"
 description = "Tamil prosody (Yappu Ilakkanam) as finite-state machines, constrained decoding for Hugging Face LLMs, and a rule-based clinical ICD-10 linker"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -14,6 +14,7 @@ dependencies = []
 [project.optional-dependencies]
 hf = ["torch>=2.0", "transformers>=4.40", "tokenizers>=0.15"]
 vision = ["onnxruntime>=1.16", "opencv-python>=4.8", "numpy>=1.24", "scipy>=1.10"]
+asp = ["clingo>=5.6"]
 dev = ["pytest>=7.4"]
 
 [project.scripts]

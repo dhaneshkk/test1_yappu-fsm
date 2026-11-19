@@ -7,7 +7,7 @@ from .lexicon import VenbaLexicon
 from .prosody import format_venba, validate_nerisai_venba
 from .tamil import encode, encode_asai, ethukai_key, graphemes, monai_key, split_display
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 
 def data_path(name: str) -> str:
