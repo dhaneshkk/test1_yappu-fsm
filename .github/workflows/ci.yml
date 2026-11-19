@@ -11,8 +11,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: pip install -e ".[dev]"
-      - run: pytest -q   # HF tests are skipped without torch
+      - run: pip install -e ".[dev,asp]"
+      - run: pytest -q   # HF tests are skipped without torch; ASP equivalence tests need clingo
   hf:
     runs-on: ubuntu-latest
     steps:

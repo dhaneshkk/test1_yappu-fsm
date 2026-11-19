@@ -31,21 +31,34 @@ def _linker(path, setting="outpatient"):
     return ClinicalLinker(load_lexicon(path or data_path("icd10cm_example_lexicon.json")), setting=setting)
 
 
-def _coder(lexicon, rules):
+def _coder(lexicon, rules, backend="datalog"):
     from .rules import RuleCoder
-    return RuleCoder(_linker(lexicon), data_path("icd10cm_rules.ace") if rules in (None, "default") else rules)
+    cls = RuleCoder
+    if backend == "asp":
+        from .rules.asp import AspRuleCoder as cls
+    return cls(_linker(lexicon), data_path("icd10cm_rules.ace") if rules in (None, "default") else rules)
 
 
 def cmd_code(a):
     text = sys.stdin.read() if a.note in (None, "-") else a.note
+    if a.alternatives and a.rules is None:
+        a.rules = "default"
     if a.rules is not None:
-        res = _coder(a.lexicon, a.rules).code(text, a.setting)
+        coder = _coder(a.lexicon, a.rules, "asp" if a.alternatives else a.backend)
+        res = coder.code(text, a.setting)
+        alts = coder.alternatives(text, a.setting) if a.alternatives else None
         if a.json:
-            print(json.dumps({"codes": res.codes, "blocked": list(res.blocked),
-                              "conflicts": [[x, y] for x, y, _ in res.conflicts], "proofs": res.proofs},
-                             ensure_ascii=False, indent=2))
+            out = {"codes": res.codes, "blocked": list(res.blocked),
+                   "conflicts": [[x, y] for x, y, _ in res.conflicts], "proofs": res.proofs}
+            if alts is not None:
+                out["alternatives"] = alts
+            print(json.dumps(out, ensure_ascii=False, indent=2))
         else:
             print(res.report())
+            if alts is not None:
+                print("\nvalid code sets (Excludes1 resolved, fewest codes dropped):")
+                for i, c in enumerate(alts, 1):
+                    print(f"  {i}. {', '.join(c) or '(none)'}")
         return
     L = _linker(a.lexicon, a.setting)
     findings = L.process(text)
@@ -67,6 +80,10 @@ def cmd_rules(a):
     prog = compile_rules(rules)
     if a.datalog:
         print(prog.to_text())
+        return
+    if a.asp:
+        from .rules.asp import AspProgram
+        print(AspProgram(prog).to_text())
         return
     for r in rules:
         print(f"{r.rid}: {r.paraphrase()}")
@@ -126,6 +143,10 @@ def main(argv=None):
     s.add_argument("--json", action="store_true")
     s.add_argument("--setting", choices=["outpatient", "inpatient"], default="outpatient",
                    help="ICD-10-CM guideline for uncertain diagnoses (default: outpatient)")
+    s.add_argument("--backend", choices=["datalog", "asp"], default="datalog",
+                   help="rule engine for --rules: built-in Datalog (default) or clingo ASP (pip install 'yappu-fsm[asp]')")
+    s.add_argument("--alternatives", action="store_true",
+                   help="ASP: list every valid code set when Excludes1 conflicts occur (implies --rules --backend asp)")
     s.add_argument("--rules", nargs="?", const="default",
                    help="apply controlled-English coding rules (default rule set, or a .ace file)")
     s.set_defaults(fn=cmd_code)
@@ -133,6 +154,7 @@ def main(argv=None):
     s.add_argument("file", nargs="?")
     s.add_argument("--lexicon")
     s.add_argument("--datalog", action="store_true", help="print the compiled Datalog program")
+    s.add_argument("--asp", action="store_true", help="print the same program as clingo ASP")
     s.set_defaults(fn=cmd_rules)
     s = sub.add_parser("eval", help="MCC evaluation on a gold JSONL file")
     s.add_argument("--gold")
