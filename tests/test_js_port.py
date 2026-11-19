@@ -75,6 +75,7 @@ VISION_JS = pathlib.Path(__file__).resolve().parents[1] / "docs" / "src" / "visi
 @pytest.mark.skipif(not VISION_JS.exists(), reason="docs/src missing")
 def test_js_timer_matches_python():
     """The tutorial's alert simulator must reproduce Timer + AlertMachine frame by frame."""
+    pytest.importorskip("numpy")           # the reference comes from yappu_fsm.vision (vision extra)
     import importlib.util
     import sys
     tools = pathlib.Path(__file__).resolve().parents[1] / "tools" / "export_tutorial_data.py"

@@ -4,8 +4,9 @@ jobs:
   core:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false                     # one job failing must not cancel the others
       matrix:
-        python: ["3.9", "3.11", "3.13"]
+        python: ["3.10", "3.11", "3.13"]   # ubuntu-latest (26.04) no longer ships Python 3.9
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

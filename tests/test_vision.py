@@ -3,9 +3,9 @@ import os
 import random
 from pathlib import Path
 
-import numpy as np
 import pytest
 
+np = pytest.importorskip("numpy")      # vision extra; the core CI job has no numpy
 pytest.importorskip("cv2")
 pytest.importorskip("scipy")
 
