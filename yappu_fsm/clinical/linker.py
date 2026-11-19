@@ -101,10 +101,14 @@ class ClinicalLinker:
                     r"\bwithout\b", r"\bno\b", r"\bfree of\b", r"\bruled out\b", r"\brules out\b",
                     r"\babsence of\b", r"\bno signs? of\b", r"\bno history of\b", r"\bnot\b",
                     r"\bnever had\b", r"\bnone\b"],
+        # Outpatient uncertain-diagnosis terms (ICD-10-CM Section IV.H) incl. "consistent with" / "compatible with"
         "UNCERTAIN": [r"\brule out\b", r"\br/o\b", r"\bpossible\b", r"\bsuspected\b",
-                      r"\bprobable\b", r"\bquestionable\b", r"\bconcern for\b",
+                      r"\bprobable\b", r"\bquestionable\b", r"\bconcern for\b", r"\bconcerning for\b",
+                      r"\bsuspicious for\b", r"\bruling out\b", r"\bconsistent with\b", r"\bcompatible with\b",
+                      r"\bpending confirmation of\b", r"\bworking diagnosis(?: of)?\b", r"\bversus\b", r"\bvs\.?(?=\s)",
                       r"\bnot (?:been )?ruled out\b", r"\bcannot be ruled out\b", r"\bnot rule out\b"],
-        "HISTORICAL": [r"\bhistory of\b", r"\bh/o\b", r"\bpmh\b", r"\bstatus post\b", r"\bs/p\b",
+        # "History of present illness" is a note section header, not a history statement
+        "HISTORICAL": [r"\bhistory of\b(?! present illness)", r"\bh/o\b", r"\bpmh\b", r"\bstatus post\b", r"\bs/p\b",
                        r"\bprevious\b", r"\bprior\b"],
         "FAMILY_HISTORY": [r"\bfamily history of\b", r"\bfhx\b", r"\bmother had\b", r"\bfather had\b",
                            r"\bmother has\b", r"\bfather has\b", r"\bsister had\b", r"\bbrother had\b"],
@@ -116,9 +120,14 @@ class ClinicalLinker:
         "NEGATED": [r"\b(?:was |is |has been |were )?ruled out\b", r"\b(?:is |was )?not present\b",
                     r"\bnot demonstrated\b", r"\bnot seen\b", r"\bnever developed\b", r"\babsent\b"],
         "HISTORICAL": [r"\b(?:has |is |was )?resolved\b"],
-        "UNCERTAIN": [r"\b(?:is |was )?(?:suspected|unlikely|possible|questionable)\b",
-                      r"\bcannot be (?:ruled out|excluded)\b", r"\bnot (?:been )?ruled out\b"],
+        "UNCERTAIN": [r"\b(?:is |was )?(?:suspected|unlikely|likely|possible|questionable)\b",
+                      r"\bcannot be (?:ruled out|excluded)\b", r"\bnot (?:been )?ruled out\b",
+                      r"\bnot yet confirmed\b", r"\bpending confirmation\b"],
     }
+    # A negation that attaches to a feature of the diagnosis, not the diagnosis itself:
+    # "no COPD exacerbations", "denies asthma attacks", "no gout flares" → the diagnosis stays PRESENT.
+    # ("admission"/"hospitalization" are deliberately absent: "ruled out pneumonia on admission" is a timing phrase)
+    FEATURE_NOUNS = r"(?:exacerbations?|flares?|flare-ups?|episodes?|attacks?|symptoms?|complications?|crises|crisis)"
     # Pseudo-triggers stop a NEGATED trigger from opening a scope (NegEx [PSEU]).
     PSEUDO_TRIGGERS = [r"\bno change\b", r"\bno increase\b", r"\bnot only\b", r"\bgram negative\b",
                        r"\bwithout difficulty\b", r"\bnot (?:been )?ruled out\b", r"\bnot rule out\b",
@@ -293,6 +302,11 @@ class ClinicalLinker:
             state = min(post, key=lambda t: t[0])[2]
         return state
 
+    def _feature_negation(self, clause_l: str, c1: int) -> bool:
+        """True if a feature noun directly follows the entity (at most one word in between),
+        so a pre-trigger such as "no" negates the feature, not the diagnosis."""
+        return re.match(r"^\s+(?:[\w-]+\s+)?" + self.FEATURE_NOUNS + r"\b", clause_l[c1:]) is not None
+
     # ------------------------------------------------------------- laterality
     def _laterality_mentions(self, clause_l: str, toks) -> List[dict]:
         out = []
@@ -330,6 +344,8 @@ class ClinicalLinker:
             lats = self._laterality_mentions(cl, toks)
             for ent in self.match_entities(toks):
                 assertion = self._assertion(cl, triggers, ent["c0"], ent["c1"])
+                if assertion == "NEGATED" and self._feature_negation(cl, ent["c1"]):
+                    assertion = "PRESENT"
                 lat, dist = self._bind_laterality(ent["t0"], ent["t1"], lats)
                 cmap = ent["entry"]["code_map"]
                 lookup = assertion

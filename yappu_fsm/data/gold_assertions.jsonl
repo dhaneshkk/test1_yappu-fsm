@@ -9,7 +9,7 @@
 {"note": "Right hip pain for two weeks. No chest pain.", "gold": [["hip pain","PRESENT","RIGHT"],["chest pain","NEGATED","UNSPECIFIED"]]}
 {"note": "Family history of HTN. Pt has T2DM.", "gold": [["hypertension","FAMILY_HISTORY","UNSPECIFIED"],["type 2 diabetes","PRESENT","UNSPECIFIED"]]}
 {"note": "Possible CAP on imaging, start antibiotics.", "gold": [["pneumonia","UNCERTAIN","UNSPECIFIED"]]}
-{"note": "Labs consistent with diabetic nefropathy.", "gold": [["diabetic nephropathy","PRESENT","UNSPECIFIED"]]}
+{"note": "Labs consistent with diabetic nefropathy.", "gold": [["diabetic nephropathy","UNCERTAIN","UNSPECIFIED"]]}
 {"note": "Pt presents with uncontrolled hypertensn and pnemonia.", "gold": [["hypertension","PRESENT","UNSPECIFIED"],["pneumonia","PRESENT","UNSPECIFIED"]]}
 {"note": "Pneumonia has resolved after treatment.", "gold": [["pneumonia","HISTORICAL","UNSPECIFIED"]]}
 {"note": "Bilateral hip pain worse on stairs.", "gold": [["hip pain","PRESENT","BILATERAL"]]}

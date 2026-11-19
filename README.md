@@ -118,6 +118,12 @@ allowed codes: M17.12, E11.3291, I10
     "absent", "cannot be ruled out", "unlikely", "resolved") scan backward. Both reach at most 6
     tokens and stop at CONJ terminators ("aside from", "secondary to", "due to", "except", …).
   * Pseudo-triggers ("no change", "gram negative", "not ruled out") cannot open a negation.
+  * Uncertain covers the outpatient terms in Section IV.H ("probable", "suspected", "questionable",
+    "rule out", "consistent with", "compatible with", "working diagnosis") plus "concerning for",
+    "ruling out", "versus", "pending confirmation" and post-triggers "likely" / "not yet confirmed".
+  * A negation that attaches to a feature of the diagnosis keeps the diagnosis PRESENT:
+    "no COPD exacerbations", "denies asthma attacks" ("No COPD." is still NEGATED).
+  * "History of present illness" is a section header, not a history statement.
   * ConText adds HISTORICAL, FAMILY_HISTORY and HYPOTHETICAL ("return if", "if the patient
     develops", "watch for").
   * Clause walls (`.`, `;`, `but`, `however`, …) split the note first; decimals like `7.5` do not.
@@ -134,9 +140,9 @@ allowed codes: M17.12, E11.3291, I10
 ```bash
 $ yappu eval
 n_pairs              31
-assertion_mcc        0.9558
+assertion_mcc        0.957
 laterality_mcc       1.0
-codable_mcc          0.9269
+codable_mcc          0.9305
 ```
 
 NegEx alignment, measured on `data/gold_negex_heldout.jsonl` (12 notes written after the
